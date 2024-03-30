@@ -1,0 +1,17 @@
+{application, lsl, [
+	{description, "Loader for Ladesäulenregister"},
+	{vsn, "0.0.0"},
+	{registered, []},
+
+	{applications, [
+		kernel,
+		stdlib,
+		jsx
+	]},
+
+	{env, []},
+	{modules, []},
+
+	{licenses, ["MIT"]},
+	{links, []}
+]}.
