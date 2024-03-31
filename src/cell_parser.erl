@@ -23,12 +23,20 @@
 
 start(Callback, CallbackState) when is_function(Callback, 2) ->
 	fun(Bin) ->
-		parse(Bin, #cell_parser_state{callback = Callback, callback_state = CallbackState})
+		remove_bom(Bin, #cell_parser_state{callback = Callback, callback_state = CallbackState})
 	end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+remove_bom(<<16#ef, 16#bb, 16#bf, Bin/binary>>, State = #cell_parser_state{}) ->
+	parse(Bin, State);
+
+remove_bom(Bin, State = #cell_parser_state{}) ->
+	parse(Bin, State).
+
+
 
 parse(eof, _State = #cell_parser_state{callback = Callback, callback_state = CallbackState, current_cell = <<>>, current_line = []}) ->
 	Callback(eof, CallbackState);

@@ -148,32 +148,32 @@ build_headers(Headers) ->
 
 
 
-set_fun(X = <<"Betreiber">>) -> standard_fun(operator);
-set_fun(X = <<"Straße"/utf8>>) -> sub_map(addr, X);
-set_fun(X = <<"Hausnummer">>) -> sub_map(addr, X);
-set_fun(X = <<"Adresszusatz">>) -> sub_map(addr, X);
-set_fun(X = <<"Postleitzahl">>) -> sub_map(addr, X);
-set_fun(X = <<"Ort">>) -> sub_map(addr, X);
-set_fun(X = <<"Bundesland">>) -> sub_map(addr, X);
-set_fun(X = <<"Kreis/kreisfreie Stadt">>) -> sub_map(addr, X);
-set_fun(X = <<"Breitengrad">>) -> to_float(sub_map(geo, lat));
-set_fun(X = <<"Längengrad"/utf8>>) -> to_float(sub_map(geo, lon));
-set_fun(X = <<"Inbetriebnahmedatum">>) -> sub_map(charging, X);
-set_fun(X = <<"Nennleistung Ladeeinrichtung [kW]">>) -> sub_map(charging, X);
-set_fun(X = <<"Art der Ladeeinrichung">>) -> sub_map(charging, X);
-set_fun(X = <<"Anzahl Ladepunkte">>) -> ignore();
-set_fun(X = <<"Steckertypen1">>) -> v_to_list(charing_point([charging, points, 1, plugs]));
-set_fun(X = <<"Steckertypen2">>) -> v_to_list(charing_point([charging, points, 2, plugs]));
-set_fun(X = <<"Steckertypen3">>) -> v_to_list(charing_point([charging, points, 3, plugs]));
-set_fun(X = <<"Steckertypen4">>) -> v_to_list(charing_point([charging, points, 4, plugs]));
-set_fun(X = <<"P1 [kW]">>) -> to_float(charing_point([charging, points, 1, kW]));
-set_fun(X = <<"P2 [kW]">>) -> to_float(charing_point([charging, points, 2, kW]));
-set_fun(X = <<"P3 [kW]">>) -> to_float(charing_point([charging, points, 3, kW]));
-set_fun(X = <<"P4 [kW]">>) -> to_float(charing_point([charging, points, 4, kW]));
-set_fun(X = <<"Public Key1">>) -> charing_point([charging, points, 1, pkey]);
-set_fun(X = <<"Public Key2">>) -> charing_point([charging, points, 2, pkey]);
-set_fun(X = <<"Public Key3">>) -> charing_point([charging, points, 3, pkey]);
-set_fun(X = <<"Public Key4">>) -> charing_point([charging, points, 4, pkey]);
+set_fun(<<"Betreiber">>) -> standard_fun(operator);
+set_fun(<<"Straße"/utf8>> = X) -> sub_map(addr, X);
+set_fun(<<"Hausnummer">> = X) -> sub_map(addr, X);
+set_fun(<<"Adresszusatz">> = X) -> sub_map(addr, X);
+set_fun(<<"Postleitzahl">> = X) -> sub_map(addr, X);
+set_fun(<<"Ort">> = X) -> sub_map(addr, X);
+set_fun(<<"Bundesland">> = X) -> sub_map(addr, X);
+set_fun(<<"Kreis/kreisfreie Stadt">> = X) -> sub_map(addr, X);
+set_fun(<<"Breitengrad">>) -> to_float(sub_map(geo, lat));
+set_fun(<<"Längengrad"/utf8>>) -> to_float(sub_map(geo, lon));
+set_fun(<<"Inbetriebnahmedatum">> = X) -> sub_map(charging, X);
+set_fun(<<"Nennleistung Ladeeinrichtung [kW]">> = X) -> sub_map(charging, X);
+set_fun(<<"Art der Ladeeinrichung">> = X) -> sub_map(charging, X);
+set_fun(<<"Anzahl Ladepunkte">>) -> ignore();
+set_fun(<<"Steckertypen1">>) -> v_to_list(charing_point([charging, points, 1, plugs]));
+set_fun(<<"Steckertypen2">>) -> v_to_list(charing_point([charging, points, 2, plugs]));
+set_fun(<<"Steckertypen3">>) -> v_to_list(charing_point([charging, points, 3, plugs]));
+set_fun(<<"Steckertypen4">>) -> v_to_list(charing_point([charging, points, 4, plugs]));
+set_fun(<<"P1 [kW]">>) -> to_float(charing_point([charging, points, 1, kW]));
+set_fun(<<"P2 [kW]">>) -> to_float(charing_point([charging, points, 2, kW]));
+set_fun(<<"P3 [kW]">>) -> to_float(charing_point([charging, points, 3, kW]));
+set_fun(<<"P4 [kW]">>) -> to_float(charing_point([charging, points, 4, kW]));
+set_fun(<<"Public Key1">>) -> charing_point([charging, points, 1, pkey]);
+set_fun(<<"Public Key2">>) -> charing_point([charging, points, 2, pkey]);
+set_fun(<<"Public Key3">>) -> charing_point([charging, points, 3, pkey]);
+set_fun(<<"Public Key4">>) -> charing_point([charging, points, 4, pkey]);
 % unknown
 set_fun(X) -> erlang:error({unknown_header, X}).
 
