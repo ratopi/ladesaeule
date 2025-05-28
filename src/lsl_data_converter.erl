@@ -32,7 +32,11 @@ get_url() ->
 load_data(Url) ->
   {ok, IO} = file:open("./ladesaeulen.json", [binary, write]),
 
-  % file:write(IO, <<${, 10>>),
+  file:write(IO, <<${, 10>>),
+
+  file:write(IO, "\"meta\":"),
+  file:write(IO, jsx:encode(get_meta(Url))),
+  file:write(IO, ","),
 
   io:fwrite("loading ~p~n", [Url]),
   case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
@@ -43,6 +47,7 @@ load_data(Url) ->
         Err = {error, _} ->
           Err;
         {ok, eof, _} ->
+          file:write(IO, <<10, $}, 10>>),
           ok;
         X = {ok, Content, _Headers} ->
           io:fwrite("TODO ~p~n", [X]),
@@ -53,6 +58,34 @@ load_data(Url) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+get_meta(Url) ->
+  {{Y, M, D}, {H, Mi, S}} = {erlang:date(), erlang:time()},
+  #{
+    download_time => <<
+      (fnum(Y))/binary,
+      $-,
+      (fnum(M))/binary,
+      $-,
+      (fnum(D))/binary,
+      $T,
+      (fnum(H))/binary,
+      $:,
+      (fnum(Mi))/binary,
+      $:,
+      (fnum(S))/binary
+    >>,
+    source => list_to_binary(Url)
+  }.
+
+
+fnum(N) ->
+  Bin = integer_to_binary(N),
+  case N < 10 of
+    true -> <<$0, Bin/binary>>;
+    false -> Bin
+  end.
+
 
 log_fun(Fun) ->
   fun(A, B) ->
@@ -79,12 +112,12 @@ handler_fun([Info | _], State = #starting{infos = Infos}) ->
 
 handler_fun(Headers2, #got_header1{io = IO}) ->
   Headers = build_headers(Headers2),
-  file:write(IO, <<${, 10, $[, 10>>),
+  file:write(IO, <<$[, 10>>),
   #read_lines{headers = Headers, io = IO};
 
 
 handler_fun(eof, #read_lines{io = IO}) ->
-  file:write(IO, <<10, $], 10, $}>>),
+  file:write(IO, <<10, $]>>),
   file:close(IO),
   eof;
 
