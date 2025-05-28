@@ -10,7 +10,7 @@
 -author("Ralf Thomas Pietsch <ratopi@abwesend.de>").
 
 %% API
--export([load_data/1]).
+-export([get_url/0, load_data/1]).
 
 -record(starting, {io, infos = []}).
 -record(got_header1, {io}).
@@ -20,131 +20,143 @@
 %%% Internal functions
 %%%===================================================================
 
+get_url() ->
+  UrlUrl = "https://raw.githubusercontent.com/ratopi/ladesaeule/refs/heads/master/url",
+  case httpc:request(UrlUrl) of
+    {ok, {{_, 200, _}, _, Url}} -> {ok, Url};
+    {ok, {Head, _, Url}} -> {error, {Head, UrlUrl}};
+    Err -> {error, Err}
+  end.
+
+
 load_data(Url) ->
-	{ok, IO} = file:open("./ladesaeulen.json", [binary, write]),
+  {ok, IO} = file:open("./ladesaeulen.json", [binary, write]),
 
-	file:write(IO, <<${, 10>>),
+  file:write(IO, <<${, 10>>),
 
-	io:fwrite("loading ~p~n", [Url]),
-	case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
-		Err = {error, _} ->
-			Err;
-		{ok, RequestId} ->
-			case parse_content(RequestId, cell_parser:start(fun handler_fun/2, #starting{io = IO})) of
-				Err = {error, _} ->
-					Err;
-				{ok, Content, _Headers} ->
-					io:fwrite("~p~n", [Content]),
-					todo
-			end
-	end.
+  io:fwrite("loading ~p~n", [Url]),
+  case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
+    Err = {error, _} ->
+      Err;
+    {ok, RequestId} ->
+      case parse_content(RequestId, cell_parser:start(fun handler_fun/2, #starting{io = IO})) of
+        Err = {error, _} ->
+          Err;
+        {ok, Content, _Headers} ->
+          io:fwrite("~p~n", [Content]),
+          todo
+      end
+  end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 log_fun(Fun) ->
-	fun(A, B) ->
-		io:fwrite("~p ~p -> ", [A, B]),
-		R = Fun(A, B),
-		io:fwrite("~p~n", [R]),
-		R
-	end.
+  fun(A, B) ->
+    io:fwrite("~p ~p -> ", [A, B]),
+    R = Fun(A, B),
+    io:fwrite("~p~n", [R]),
+    R
+  end.
 
 
 
 handler_fun([<<"Allgemeine Informationen">> | _], #starting{io = IO, infos = Infos}) ->
-	file:write(IO, <<"\"infos\":", 10>>),
-	file:write(IO, jsx:encode(lists:reverse(Infos))),
-	file:write(IO, <<$,, 10, "\"data\":", 10>>),
-	#got_header1{io = IO};
+  file:write(IO, <<"\"infos\":", 10>>),
+  file:write(IO, jsx:encode(lists:reverse(Infos))),
+  file:write(IO, <<$,, 10, "\"data\":", 10>>),
+  #got_header1{io = IO};
 
 handler_fun([<<>> | _], State = #starting{}) ->
-	State;
+  State;
 
 handler_fun([Info | _], State = #starting{infos = Infos}) ->
-	State#starting{infos = [Info | Infos]};
+  State#starting{infos = [Info | Infos]};
 
 
 handler_fun(Headers2, #got_header1{io = IO}) ->
-	Headers = build_headers(Headers2),
-	file:write(IO, <<$[, 10>>),
-	#read_lines{headers = Headers, io = IO};
+  Headers = build_headers(Headers2),
+  file:write(IO, <<$[, 10>>),
+  #read_lines{headers = Headers, io = IO};
 
 
 handler_fun(eof, #read_lines{io = IO}) ->
-	file:write(IO, <<10, $], 10, $}>>),
-	file:close(IO),
-	undefined;
+  file:write(IO, <<10, $], 10, $}>>),
+  file:close(IO),
+  undefined;
 
 handler_fun([<<>> | _], State = #read_lines{}) ->
-	State;
+  State;
 
 handler_fun(Line, State = #read_lines{io = IO, headers = Headers, first_line = true}) ->
-	Map = build_map(Headers, Line),
-	file:write(IO, jsx:encode(Map)),
-	State#read_lines{first_line = false};
+  Map = build_map(Headers, Line),
+  file:write(IO, jsx:encode(Map)),
+  State#read_lines{first_line = false};
 
 handler_fun(Line, State = #read_lines{io = IO, headers = Headers}) ->
-	Map = build_map(Headers, Line),
-	file:write(IO, <<$,, 10>>),
-	file:write(IO, jsx:encode(Map)),
-	State.
+  Map = build_map(Headers, Line),
+  file:write(IO, <<$,, 10>>),
+  file:write(IO, jsx:encode(Map)),
+  State.
 
 
 
 parse_content(RequestId, CellParserFun) ->
-	receive
-		{http, {RequestId, stream_start, _Headers}} ->
-			parse_content(RequestId, CellParserFun);
+  receive
+    {http, {RequestId, stream_start, _Headers}} ->
+      parse_content(RequestId, CellParserFun);
 
-		{http, {RequestId, stream, BinBodyPart}} ->
-			% io:fwrite("got ~p bytes~n", [size(BinBodyPart)]),
-			parse_content(RequestId, CellParserFun(BinBodyPart));
+    {http, {RequestId, stream, BinBodyPart}} ->
+      % io:fwrite("got ~p bytes~n", [size(BinBodyPart)]),
+      parse_content(RequestId, CellParserFun(BinBodyPart));
 
-		{http, {RequestId, stream_end, Headers}} ->
-			{ok, CellParserFun(eof), Headers}
+    {http, {RequestId, stream_end, Headers}} ->
+      {ok, CellParserFun(eof), Headers};
 
-	after 10000 ->
-		{error, timeout}
-	end.
+    {http, {RequestId, {{_, 404, _}, _Headers, _Content}}} ->
+      {error, not_found}
+
+  after 10000 ->
+    {error, timeout}
+  end.
 
 
 
 build_map(Headers, Line) ->
-	deep_change(
-		[charging, points],
-		fun(Map) ->
-			lists:foldl(
-				fun(N, L) ->
-					case maps:get(N, Map, undefined) of
-						undefined -> L;
-						V -> [V | L]
-					end
-				end,
-				[],
-				[4, 3, 2, 1]
-			)
-		end,
-		build_map(Headers, Line, #{})
-	).
+  deep_change(
+    [charging, points],
+    fun(Map) ->
+      lists:foldl(
+        fun(N, L) ->
+          case maps:get(N, Map, undefined) of
+            undefined -> L;
+            V -> [V | L]
+          end
+        end,
+        [],
+        [4, 3, 2, 1]
+      )
+    end,
+    build_map(Headers, Line, #{})
+  ).
 
 
 
 build_map([], [], Map) ->
-	Map;
+  Map;
 
 build_map([_ | Headers], [<<>> | Line], Map) ->
-	build_map(Headers, Line, Map);
+  build_map(Headers, Line, Map);
 
 build_map([Fun | Headers], [V | Line], Map) ->
-	MV = re:replace(V, <<"(", 194, 160, ")|(\n)$">>, <<>>, [{return, binary}]), % remove trailing space or newline in cell
-	build_map(Headers, Line, Fun(MV, Map)).
+  MV = re:replace(V, <<"(", 194, 160, ")|(\n)$">>, <<>>, [{return, binary}]), % remove trailing space or newline in cell
+  build_map(Headers, Line, Fun(MV, Map)).
 
 
 
 build_headers(Headers) ->
-	lists:map(fun set_fun/1, Headers).
+  lists:map(fun set_fun/1, Headers).
 
 
 
@@ -184,45 +196,45 @@ standard_fun(X) -> fun(V, Map) -> maps:put(X, V, Map) end.
 sub_map(SubKey, Key) -> fun(V, Map) -> maps:put(SubKey, maps:put(Key, V, maps:get(SubKey, Map, #{})), Map) end.
 
 charing_point(KeyPath) ->
-	fun(V, Map) ->
-		deep_put(KeyPath, V, Map)
-	end.
+  fun(V, Map) ->
+    deep_put(KeyPath, V, Map)
+  end.
 
 ignore() -> fun(_, Map) -> Map end.
 
 
 to_float(Fun) ->
-	fun(V, Map) ->
-		case string:split(V, <<$,>>) of
-			[A, B] ->
-				Fun(binary_to_float(<<A/binary, $., B/binary>>), Map);
-			[_] ->
-				Fun(binary_to_integer(V), Map)
-		end
-	end.
+  fun(V, Map) ->
+    case string:split(V, <<$,>>) of
+      [A, B] ->
+        Fun(binary_to_float(<<A/binary, $., B/binary>>), Map);
+      [_] ->
+        Fun(binary_to_integer(V), Map)
+    end
+  end.
 
 
 
 v_to_list(Fun) ->
-	fun(V, Map) ->
-		Fun(string:split(V, <<", ">>, all), Map)
-	end.
+  fun(V, Map) ->
+    Fun(string:split(V, <<", ">>, all), Map)
+  end.
 
 
 
 deep_put([K], V, Map) ->
-	maps:put(K, V, Map);
+  maps:put(K, V, Map);
 
 deep_put([K | T], V, Map) ->
-	maps:put(K, deep_put(T, V, maps:get(K, Map, #{})), Map).
+  maps:put(K, deep_put(T, V, maps:get(K, Map, #{})), Map).
 
 
 
 deep_change([K], F, Map) ->
-	case maps:get(K, Map, undefined) of
-		undefined -> Map;
-		V -> maps:put(K, F(V), Map)
-	end;
+  case maps:get(K, Map, undefined) of
+    undefined -> Map;
+    V -> maps:put(K, F(V), Map)
+  end;
 
 deep_change([K | T], F, Map) ->
-	maps:put(K, deep_change(T, F, maps:get(K, Map, #{})), Map).
+  maps:put(K, deep_change(T, F, maps:get(K, Map, #{})), Map).
