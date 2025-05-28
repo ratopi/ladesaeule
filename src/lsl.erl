@@ -22,7 +22,7 @@ main(_Args) ->
   case lsl_data_converter:get_url() of
     {ok, Url} ->
       case lsl_data_converter:load_data(Url) of
-        {ok, _, _} -> io:fwrite("finished~n");
+        ok -> io:fwrite("finished~n");
         Err = {error, _} -> io:fwrite("FAIL ~p~n", [Err])
       end;
     Err ->
