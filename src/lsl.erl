@@ -19,6 +19,7 @@ main(_Args) ->
   application:ensure_started(stdlib),
   application:ensure_started(inets),
   application:ensure_started(jsx),
+  ssl:start(),
   case lsl_data_converter:get_url() of
     {ok, Url} ->
       case lsl_data_converter:load_data(Url) of
