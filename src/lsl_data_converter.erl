@@ -21,11 +21,19 @@
 %%%===================================================================
 
 get_url() ->
-  UrlUrl = "https://raw.githubusercontent.com/ratopi/ladesaeule/refs/heads/master/url",
+  UrlUrl = "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/start.html",
   case httpc:request(UrlUrl) of
-    {ok, {{_, 200, _}, _, Url}} -> {ok, Url};
-    {ok, {Head, _, _}} -> {error, {Head, UrlUrl}};
-    Err -> {error, Err}
+    {ok, {{_, 200, _}, _, Body}} ->
+      case re:run(Body, "<a[^>]*href=\"([^>\"]*[.]csv)\"[^>]*>") of
+        {match, [{_, _}, {Start, Length}]} ->
+          {ok, lists:sublist(Body, Start + 1, Length)};
+        _ ->
+          {error, {csv_file, url_not_found}}
+      end;
+    {ok, {Head, _, _}} ->
+      {error, {Head, UrlUrl}};
+    Err ->
+      {error, Err}
   end.
 
 
