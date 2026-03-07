@@ -28,17 +28,22 @@ main(_Args) ->
     {ok, Url} ->
       case lsl_loader:needs_update(Url) of
         false ->
-          io:fwrite("no update needed~n");
+          io:fwrite("no update needed~n"),
+          erlang:halt(0);
         true ->
           case lsl_loader:load_data(Url) of
-            ok -> io:fwrite("finished~n");
-            Err = {error, _} -> io:fwrite("FAIL ~p~n", [Err])
+            ok ->
+              io:fwrite("finished~n"),
+              erlang:halt(0);
+            Err = {error, _} ->
+              io:fwrite("FAIL ~p~n", [Err]),
+              erlang:halt(1)
           end
       end;
     Err ->
-      io:fwrite("Can't get URL: ~p~n", [Err])
-  end,
-  erlang:halt(0).
+      io:fwrite("Can't get URL: ~p~n", [Err]),
+      erlang:halt(1)
+  end.
 
 %%====================================================================
 %% Internal functions

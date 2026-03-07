@@ -2,6 +2,13 @@
 
 Lädt und konvertiert das offizielle Ladesäulenregister der Bundesnetzagentur in ein besser brauchbares JSON-Format.
 
+## Online-Zugriff auf die JSON-Datei
+
+Die aktuelle `ladesaeulen.json` wird wöchentlich per [GitHub Action](#github-action) aktualisiert und ist
+über GitHub Pages abrufbar:
+
+**https://ratopi.github.io/ladesaeule/ladesaeulen.json**
+
 ## Bauen
 
 Voraussetzung: Erlang/OTP und [rebar3](https://rebar3.org/) müssen installiert sein.
@@ -162,19 +169,24 @@ Am Ende der JSON-Datei wird über `lsl_json` ein `meta`-Objekt geschrieben mit:
 | `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben |
 | `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, BOM-Entfernung |
 
-## Online-Zugriff auf die JSON-Datei
-
-Die aktuelle `ladesaeulen.json` wird wöchentlich per GitHub Action aktualisiert und ist
-über GitHub Pages abrufbar:
-
-**https://ratopi.github.io/ladesaeule/ladesaeulen.json**
 
 ## GitHub Action
 
-Die Workflow-Datei `.github/workflows/update.yml` automatisiert die Aktualisierung:
+Die Workflow-Datei `.github/workflows/update.yml` automatisiert die Aktualisierung.
 
-**Zeitplan:** Jeden Montag um 6:00 UTC (per Cron), zusätzlich manuell auslösbar über
-den „Run workflow"-Button im Actions-Tab.
+**Zeitplan:** Jeden Montag um 6:00 UTC (per Cron).
+
+**Manuell auslösen:** Der Workflow kann jederzeit manuell gestartet werden:
+
+- **Über die GitHub-Weboberfläche:** Im Repository unter *Actions* → *Update Ladesäulenregister*
+  → *Run workflow* klicken.
+- **Per GitHub API:**
+
+      curl -X POST \
+        -H "Authorization: token DEIN_GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        https://api.github.com/repos/ratopi/ladesaeule/actions/workflows/update.yml/dispatches \
+        -d '{"ref":"master"}'
 
 **Ablauf:**
 
@@ -187,7 +199,11 @@ den „Run workflow"-Button im Actions-Tab.
 6. **Konvertierung** – `lsl` ausführen; prüft per HEAD-Request ob sich die CSV
    geändert hat und lädt nur bei Bedarf herunter
 7. **Deploy** – `public/`-Verzeichnis in den `gh-pages`-Branch pushen
-   (`peaceiris/actions-gh-pages`)
+   (`peaceiris/actions-gh-pages`); nur wenn sich tatsächlich etwas geändert hat
+
+**Hinweis:** GitHub deaktiviert Scheduled Workflows automatisch, wenn ein Repository
+60 Tage lang keine Aktivität hat (kein Push, Issue oder PR). In dem Fall muss der
+Workflow im Actions-Tab manuell wieder aktiviert werden.
 
 ## Lizenz
 

@@ -37,10 +37,18 @@ jobs:
           git checkout origin/gh-pages -- ladesaeulen.json 2>/dev/null && mv ladesaeulen.json public/ || echo "No existing ladesaeulen.json found"
 
       - name: Download and convert CSV (if changed)
-        run: ./_build/prod/bin/lsl
+        id: convert
+        run: |
+          set -o pipefail
+          ./_build/prod/bin/lsl 2>&1 | tee /tmp/lsl_output.txt
+          if grep -q "finished" /tmp/lsl_output.txt; then
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Deploy to gh-pages
-        if: hashFiles('public/ladesaeulen.json') != ''
+        if: steps.convert.outputs.updated == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
