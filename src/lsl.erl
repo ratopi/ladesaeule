@@ -14,6 +14,10 @@
 %% API functions
 %%====================================================================
 
+%% @doc Escript entry point.
+%% Fetches the current CSV URL from the Bundesnetzagentur website,
+%% downloads the CSV and converts it to `public/ladesaeulen.json`.
+-spec main([string()]) -> no_return().
 main(_Args) ->
   application:ensure_started(kernel),
   application:ensure_started(stdlib),
@@ -22,9 +26,14 @@ main(_Args) ->
   ssl:start(),
   case lsl_data_converter:get_url() of
     {ok, Url} ->
-      case lsl_data_converter:load_data(Url) of
-        ok -> io:fwrite("finished~n");
-        Err = {error, _} -> io:fwrite("FAIL ~p~n", [Err])
+      case lsl_data_converter:needs_update(Url) of
+        false ->
+          io:fwrite("no update needed~n");
+        true ->
+          case lsl_data_converter:load_data(Url) of
+            ok -> io:fwrite("finished~n");
+            Err = {error, _} -> io:fwrite("FAIL ~p~n", [Err])
+          end
       end;
     Err ->
       io:fwrite("Can't get URL: ~p~n", [Err])

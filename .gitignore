@@ -19,3 +19,5 @@ logs
 rebar3.crashdump
 *~
 ladesaeulen.json
+public/
+test/data/test_output.json

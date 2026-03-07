@@ -1,8 +1,8 @@
 %%%-------------------------------------------------------------------
 %%% @author Ralf Thomas Pietsch <ratopi@abwesend.de>
 %%% @copyright (C) 2024, Ralf Thomas Pietsch
-%%% @doc
-%%%
+%%% @doc Downloads the Bundesnetzagentur Ladesäulenregister CSV and
+%%% converts it to a structured JSON file.
 %%% @end
 %%% Created : 28. Mär 2024 23:59
 %%%-------------------------------------------------------------------
@@ -10,7 +10,7 @@
 -author("Ralf Thomas Pietsch <ratopi@abwesend.de>").
 
 %% API
--export([get_url/0, load_data/1]).
+-export([get_url/0, needs_update/1, load_data/1, convert_file/2]).
 
 -record(starting, {io, infos = []}).
 -record(got_header1, {io}).
@@ -20,6 +20,9 @@
 %%% API
 %%%===================================================================
 
+%% @doc Scrapes the Bundesnetzagentur E-Mobility page and extracts
+%% the URL of the current Ladesäulenregister CSV file.
+-spec get_url() -> {ok, string()} | {error, term()}.
 get_url() ->
   UrlUrl = "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/start.html",
   case httpc:request(UrlUrl) of
@@ -37,8 +40,51 @@ get_url() ->
   end.
 
 
+%% @doc Checks whether the CSV at `Url' has changed compared to the
+%% existing `public/ladesaeulen.json'. Returns `true' if an update is
+%% needed, `false' if the data is unchanged.
+%% Compares the URL and the `Last-Modified' HTTP header.
+-spec needs_update(string()) -> boolean().
+needs_update(Url) ->
+  case read_existing_meta() of
+    {ok, Meta} ->
+      ExistingSource = maps:get(<<"source">>, Meta, undefined),
+      ExistingLastMod = maps:get(<<"source_last_modified">>, Meta, undefined),
+      UrlBin = list_to_binary(Url),
+      case ExistingSource =:= UrlBin of
+        false ->
+          io:fwrite("URL changed~n"),
+          true;
+        true ->
+          case get_last_modified(Url) of
+            {ok, LastModified} ->
+              LastModBin = list_to_binary(LastModified),
+              case ExistingLastMod =:= LastModBin of
+                true ->
+                  io:fwrite("Last-Modified unchanged: ~s~n", [LastModified]),
+                  false;
+                false ->
+                  io:fwrite("Last-Modified changed: ~s -> ~s~n", [ExistingLastMod, LastModified]),
+                  true
+              end;
+            {error, _} ->
+              %% Can't determine Last-Modified, update to be safe
+              true
+          end
+      end;
+    {error, _} ->
+      %% No existing file or not readable, update needed
+      true
+  end.
+
+
+%% @doc Downloads the CSV from `Url' via HTTP streaming, converts it
+%% and writes the result to `public/ladesaeulen.json'.
+-spec load_data(string()) -> ok | {error, term()}.
 load_data(Url) ->
-  case file:open("./ladesaeulen.json", [binary, write]) of
+  ok = filelib:ensure_dir("./public/"),
+  file:make_dir("./public"),
+  case file:open("./public/ladesaeulen.json", [binary, write]) of
     {ok, IO} ->
       load_data(Url, IO);
     {error, Reason} ->
@@ -48,10 +94,6 @@ load_data(Url) ->
 
 load_data(Url, IO) ->
   file:write(IO, <<${, 10>>),
-
-  file:write(IO, "\"meta\":"),
-  file:write(IO, jsx:encode(get_meta(Url))),
-  file:write(IO, ","),
 
   io:fwrite("loading ~p~n", [Url]),
   case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
@@ -63,23 +105,88 @@ load_data(Url, IO) ->
         Err = {error, _} ->
           file:close(IO),
           Err;
-        {ok, eof, _} ->
+        {ok, eof, HttpHeaders} ->
+          LastModified = proplists:get_value("last-modified", HttpHeaders, undefined),
+          file:write(IO, <<",\n">>),
+          file:write(IO, <<"\"meta\":">>),
+          file:write(IO, jsx:encode(get_meta(Url, LastModified))),
           file:write(IO, <<10, $}, 10>>),
           file:close(IO),
           ok;
-        {ok, _Content, _Headers} ->
+        {ok, _Content, HttpHeaders} ->
+          LastModified = proplists:get_value("last-modified", HttpHeaders, undefined),
+          file:write(IO, <<",\n">>),
+          file:write(IO, <<"\"meta\":">>),
+          file:write(IO, jsx:encode(get_meta(Url, LastModified))),
+          file:write(IO, <<10, $}, 10>>),
           file:close(IO),
           ok
       end
+  end.
+
+
+%% @doc Converts a local CSV file to JSON. Used for testing.
+-spec convert_file(string(), string()) -> {ok, term()} | {error, term()}.
+convert_file(CsvPath, JsonPath) ->
+  case file:read_file(CsvPath) of
+    {ok, CsvBin} ->
+      case file:open(JsonPath, [binary, write]) of
+        {ok, IO} ->
+          file:write(IO, <<${, 10>>),
+          Parser = cell_parser:start(fun handler_fun/2, #starting{io = IO}),
+          Result = (Parser(CsvBin))(eof),
+          file:write(IO, <<",\n">>),
+          file:write(IO, <<"\"meta\":">>),
+          file:write(IO, jsx:encode(get_meta(CsvPath, undefined))),
+          file:write(IO, <<10, $}, 10>>),
+          file:close(IO),
+          {ok, Result};
+        {error, Reason} ->
+          {error, {open_file, Reason}}
+      end;
+    {error, Reason} ->
+      {error, {read_file, Reason}}
   end.
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
-get_meta(Url) ->
+%% Reads the "meta" object from the existing public/ladesaeulen.json.
+read_existing_meta() ->
+  case file:read_file("./public/ladesaeulen.json") of
+    {ok, Bin} ->
+      try
+        Map = jsx:decode(Bin, [return_maps]),
+        case maps:get(<<"meta">>, Map, undefined) of
+          undefined -> {error, no_meta};
+          Meta -> {ok, Meta}
+        end
+      catch
+        _:_ -> {error, invalid_json}
+      end;
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+%% Performs a HEAD request to get the Last-Modified header without
+%% downloading the full file.
+get_last_modified(Url) ->
+  case httpc:request(head, {Url, []}, [], []) of
+    {ok, {{_, 200, _}, Headers, _}} ->
+      case proplists:get_value("last-modified", Headers, undefined) of
+        undefined -> {error, no_last_modified};
+        Value -> {ok, Value}
+      end;
+    {ok, {{_, Code, _}, _, _}} ->
+      {error, {http_status, Code}};
+    {error, Reason} ->
+      {error, Reason}
+  end.
+
+get_meta(Url, LastModified) ->
   {{Y, M, D}, {H, Mi, S}} = {erlang:date(), erlang:time()},
-  #{
+  Meta0 = #{
     download_time => <<
       (fnum(Y))/binary,
       $-,
@@ -94,7 +201,11 @@ get_meta(Url) ->
       (fnum(S))/binary
     >>,
     source => list_to_binary(Url)
-  }.
+  },
+  case LastModified of
+    undefined -> Meta0;
+    _ -> Meta0#{source_last_modified => list_to_binary(LastModified)}
+  end.
 
 
 fnum(N) ->
@@ -127,7 +238,6 @@ handler_fun(Headers2, #got_header1{io = IO}) ->
 
 handler_fun(eof, #read_lines{io = IO}) ->
   file:write(IO, <<10, $]>>),
-  file:close(IO),
   eof;
 
 handler_fun([<<>> | _], State = #read_lines{}) ->
@@ -147,16 +257,19 @@ handler_fun(Line, State = #read_lines{io = IO, headers = Headers}) ->
 
 
 parse_content(RequestId, CellParserFun) ->
+  parse_content(RequestId, CellParserFun, []).
+
+parse_content(RequestId, CellParserFun, HttpHeaders) ->
   receive
-    {http, {RequestId, stream_start, _Headers}} ->
-      parse_content(RequestId, CellParserFun);
+    {http, {RequestId, stream_start, Headers}} ->
+      parse_content(RequestId, CellParserFun, Headers);
 
     {http, {RequestId, stream, BinBodyPart}} ->
       % io:fwrite("got ~p bytes~n", [size(BinBodyPart)]),
-      parse_content(RequestId, CellParserFun(BinBodyPart));
+      parse_content(RequestId, CellParserFun(BinBodyPart), HttpHeaders);
 
-    {http, {RequestId, stream_end, Headers}} ->
-      {ok, CellParserFun(eof), Headers};
+    {http, {RequestId, stream_end, _TrailerHeaders}} ->
+      {ok, CellParserFun(eof), HttpHeaders};
 
     {http, {RequestId, {{_, 404, _}, _Headers, _Content}}} ->
       {error, not_found}
@@ -289,7 +402,7 @@ to_float(Fun) ->
 
 v_to_list(Fun) ->
   fun(V, Map) ->
-    Fun(string:split(V, <<", ">>, all), Map)
+    Fun(string:split(V, <<"; ">>, all), Map)
   end.
 
 

@@ -1,8 +1,9 @@
 %%%-------------------------------------------------------------------
 %%% @author Ralf Thomas Pietsch <ratopi@abwesend.de>
 %%% @copyright (C) 2023, Ralf Thomas Pietsch
-%%% @doc
-%%%
+%%% @doc Continuation-based CSV parser for semicolon-separated,
+%%% optionally quoted cells. Handles UTF-8 BOM removal.
+%%% Returns a fun that accepts binary chunks or the atom `eof'.
 %%% @end
 %%% Created : 01. Dez 2023 03:25
 %%%-------------------------------------------------------------------
@@ -21,6 +22,14 @@
 %%% API
 %%%===================================================================
 
+%% @doc Creates a new parser function.
+%% `Callback' is called with each parsed line (list of binaries) or the
+%% atom `eof'. `CallbackState' is threaded through successive calls.
+%% Returns a fun/1 that accepts a binary chunk or `eof'.
+-spec start(Callback, CallbackState) -> fun((binary() | eof) -> term()) when
+    Callback :: fun(([binary()] | eof, State) -> State),
+    CallbackState :: State,
+    State :: term().
 start(Callback, CallbackState) when is_function(Callback, 2) ->
 	fun(Bin) ->
 		remove_bom(Bin, #cell_parser_state{callback = Callback, callback_state = CallbackState})

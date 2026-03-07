@@ -1,0 +1,50 @@
+name: Update Ladesäulenregister
+
+on:
+  schedule:
+    # Jeden Montag um 6:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          rebar3-version: '3.24'
+
+      - name: Build escript
+        run: rebar3 as prod escriptize
+
+      - name: Run tests
+        run: rebar3 eunit
+
+      - name: Restore existing JSON from gh-pages
+        run: |
+          mkdir -p public
+          git fetch origin gh-pages --depth=1 || true
+          git checkout origin/gh-pages -- ladesaeulen.json 2>/dev/null && mv ladesaeulen.json public/ || echo "No existing ladesaeulen.json found"
+
+      - name: Download and convert CSV (if changed)
+        run: ./_build/prod/bin/lsl
+
+      - name: Deploy to gh-pages
+        if: hashFiles('public/ladesaeulen.json') != ''
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          commit_message: "Update ladesaeulen.json"
+
