@@ -1,7 +1,7 @@
 %%%-------------------------------------------------------------------
-%%% @doc Tests for lsl_data_converter using a sample CSV file.
+%%% @doc Tests for lsl_converter using a sample CSV file.
 %%%-------------------------------------------------------------------
--module(lsl_data_converter_tests).
+-module(lsl_converter_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -11,7 +11,7 @@
 %% --- Helper ---
 
 convert_sample() ->
-  {ok, _} = lsl_data_converter:convert_file(?SAMPLE_CSV, ?OUTPUT_JSON),
+  {ok, _} = lsl_converter:convert_file(?SAMPLE_CSV, ?OUTPUT_JSON),
   {ok, Bin} = file:read_file(?OUTPUT_JSON),
   jsx:decode(Bin, [return_maps]).
 

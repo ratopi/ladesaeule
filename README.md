@@ -29,21 +29,33 @@ die Konvertierung lokal, ohne HTTP-Zugriff.
 
 ### 1. URL ermitteln
 
-Das Tool lädt die E-Mobilitäts-Startseite der Bundesnetzagentur und extrahiert per Regex
+`lsl_loader` lädt die E-Mobilitäts-Startseite der Bundesnetzagentur und extrahiert per Regex
 den Link zur aktuellen CSV-Datei (der Dateiname enthält ein Datum, das sich bei jeder
 Aktualisierung ändert).
 
-### 2. CSV streamen & parsen
+### 2. Prüfen ob ein Update nötig ist
+
+`lsl_loader` liest über `lsl_json` das `meta`-Objekt aus der bestehenden
+`public/ladesaeulen.json` (falls vorhanden) und vergleicht:
+
+- **URL** – hat sich der Dateiname/Link geändert?
+- **Last-Modified** – wird per HTTP HEAD-Request geholt und mit dem gespeicherten
+  Wert verglichen.
+
+Nur wenn sich etwas geändert hat (oder noch keine Ausgabe existiert), wird die CSV
+heruntergeladen und konvertiert.
+
+### 3. CSV streamen & parsen
 
 Die CSV wird per HTTP-Streaming (`httpc`, async) heruntergeladen.
 Die empfangenen Chunks werden direkt dem `cell_parser` übergeben – einem
 Continuation-basierten CSV-Parser, der Semikolon-getrennte, optional in Anführungszeichen
 maskierte Zellen verarbeitet und einen UTF-8 BOM am Dateianfang entfernt.
 
-### 3. Header und Info-Zeilen verarbeiten
+### 4. Header und Info-Zeilen verarbeiten
 
 Die CSV beginnt mit mehreren Info-Zeilen (Titel, Hinweise, Aktualisierungsdatum).
-Diese werden in das `infos`-Array der JSON-Ausgabe übernommen.
+Diese werden von `lsl_converter` in das `infos`-Array der JSON-Ausgabe übernommen.
 
 Dann folgen zwei Header-Zeilen:
 
@@ -52,9 +64,9 @@ Dann folgen zwei Header-Zeilen:
 - **Zeile 2** – Die eigentlichen Spaltennamen (z.B. `Betreiber`, `Steckertypen1`, `P2 [kW]`).
   Die Zuordnung zu den Ladepunkten 1–6 erfolgt über das Suffix im Spaltennamen.
 
-### 4. Datenzeilen in JSON konvertieren
+### 5. Datenzeilen in JSON konvertieren
 
-Jede Datenzeile wird anhand der Spaltennamen in eine verschachtelte Map überführt:
+Jede Datenzeile wird von `lsl_converter` anhand der Spaltennamen in eine verschachtelte Map überführt:
 
 | CSV-Spalte(n)                | JSON-Ziel                         |
 |------------------------------|-----------------------------------|
@@ -75,9 +87,9 @@ Jede Datenzeile wird anhand der Spaltennamen in eine verschachtelte Map überfü
 Leere Zellen werden übersprungen. Ladepunkte ohne Daten tauchen nicht im Array auf.
 Werte mit Komma-Dezimaltrenner (z.B. Koordinaten) werden in Fließkommazahlen konvertiert.
 
-### 5. Meta-Informationen anhängen
+### 6. Meta-Informationen anhängen
 
-Am Ende der JSON-Datei wird ein `meta`-Objekt geschrieben mit:
+Am Ende der JSON-Datei wird über `lsl_json` ein `meta`-Objekt geschrieben mit:
 
 - `source` – die URL der CSV-Datei
 - `download_time` – Zeitstempel des Downloads
@@ -140,6 +152,16 @@ Am Ende der JSON-Datei wird ein `meta`-Objekt geschrieben mit:
 }
 ```
 
+## Modulstruktur
+
+| Modul | Aufgabe |
+|-------|---------|
+| `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
+| `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
+| `lsl_converter` | CSV→JSON-Konvertierung – Header-Mapping, Datenzeilen in verschachtelte Maps überführen, Ladepunkte als Array aufbauen |
+| `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben |
+| `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, BOM-Entfernung |
+
 ## Online-Zugriff auf die JSON-Datei
 
 Die aktuelle `ladesaeulen.json` wird wöchentlich per GitHub Action aktualisiert und ist
@@ -147,8 +169,25 @@ Die aktuelle `ladesaeulen.json` wird wöchentlich per GitHub Action aktualisiert
 
 **https://ratopi.github.io/ladesaeule/ladesaeulen.json**
 
-Die Action (`.github/workflows/update.yml`) läuft jeden Montag um 6:00 UTC und kann auch
-manuell über den „Run workflow"-Button im Actions-Tab ausgelöst werden.
+## GitHub Action
+
+Die Workflow-Datei `.github/workflows/update.yml` automatisiert die Aktualisierung:
+
+**Zeitplan:** Jeden Montag um 6:00 UTC (per Cron), zusätzlich manuell auslösbar über
+den „Run workflow"-Button im Actions-Tab.
+
+**Ablauf:**
+
+1. **Checkout** – Repository auschecken
+2. **Setup** – Erlang/OTP 27 und rebar3 installieren (`erlef/setup-beam`)
+3. **Build** – Escript bauen (`rebar3 as prod escriptize`)
+4. **Test** – EUnit-Tests ausführen (`rebar3 eunit`)
+5. **Restore** – Die bestehende `ladesaeulen.json` vom `gh-pages`-Branch holen
+   (falls vorhanden), damit der Update-Check vergleichen kann
+6. **Konvertierung** – `lsl` ausführen; prüft per HEAD-Request ob sich die CSV
+   geändert hat und lädt nur bei Bedarf herunter
+7. **Deploy** – `public/`-Verzeichnis in den `gh-pages`-Branch pushen
+   (`peaceiris/actions-gh-pages`)
 
 ## Lizenz
 

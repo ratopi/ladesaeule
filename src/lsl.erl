@@ -24,13 +24,13 @@ main(_Args) ->
   application:ensure_started(inets),
   application:ensure_started(jsx),
   ssl:start(),
-  case lsl_data_converter:get_url() of
+  case lsl_loader:get_url() of
     {ok, Url} ->
-      case lsl_data_converter:needs_update(Url) of
+      case lsl_loader:needs_update(Url) of
         false ->
           io:fwrite("no update needed~n");
         true ->
-          case lsl_data_converter:load_data(Url) of
+          case lsl_loader:load_data(Url) of
             ok -> io:fwrite("finished~n");
             Err = {error, _} -> io:fwrite("FAIL ~p~n", [Err])
           end
