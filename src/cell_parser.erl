@@ -42,7 +42,6 @@ parse(eof, _State = #cell_parser_state{callback = Callback, callback_state = Cal
 	Callback(eof, CallbackState);
 
 parse(eof, _State = #cell_parser_state{callback = Callback, callback_state = CallbackState, current_cell = Cell, current_line = Line}) ->
-	io:fwrite("xxxx ~p~n", [_State]),
 	NewCallbackState = Callback(lists:reverse([Cell | Line]), CallbackState),
 	Callback(eof, NewCallbackState);
 

@@ -17,7 +17,7 @@
 -record(read_lines, {io, headers, first_line = true}).
 
 %%%===================================================================
-%%% Internal functions
+%%% API
 %%%===================================================================
 
 get_url() ->
@@ -38,8 +38,15 @@ get_url() ->
 
 
 load_data(Url) ->
-  {ok, IO} = file:open("./ladesaeulen.json", [binary, write]),
+  case file:open("./ladesaeulen.json", [binary, write]) of
+    {ok, IO} ->
+      load_data(Url, IO);
+    {error, Reason} ->
+      io:fwrite("Error opening output file: ~p~n", [Reason]),
+      {error, {open_file, Reason}}
+  end.
 
+load_data(Url, IO) ->
   file:write(IO, <<${, 10>>),
 
   file:write(IO, "\"meta\":"),
@@ -49,17 +56,20 @@ load_data(Url) ->
   io:fwrite("loading ~p~n", [Url]),
   case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
     Err = {error, _} ->
+      file:close(IO),
       Err;
     {ok, RequestId} ->
       case parse_content(RequestId, cell_parser:start(fun handler_fun/2, #starting{io = IO})) of
         Err = {error, _} ->
+          file:close(IO),
           Err;
         {ok, eof, _} ->
           file:write(IO, <<10, $}, 10>>),
+          file:close(IO),
           ok;
-        X = {ok, Content, _Headers} ->
-          io:fwrite("TODO ~p~n", [X]),
-          todo
+        {ok, _Content, _Headers} ->
+          file:close(IO),
+          ok
       end
   end.
 
@@ -92,15 +102,6 @@ fnum(N) ->
   case N < 10 of
     true -> <<$0, Bin/binary>>;
     false -> Bin
-  end.
-
-
-log_fun(Fun) ->
-  fun(A, B) ->
-    io:fwrite("~p ~p -> ", [A, B]),
-    R = Fun(A, B),
-    io:fwrite("~p~n", [R]),
-    R
   end.
 
 
@@ -178,7 +179,7 @@ build_map(Headers, Line) ->
           end
         end,
         [],
-        [4, 3, 2, 1]
+        [6, 5, 4, 3, 2, 1]
       )
     end,
     build_map(Headers, Line, #{})
@@ -227,36 +228,36 @@ set_fun(<<"Inbetriebnahmedatum">> = X) -> sub_map(charging, X);
 set_fun(<<"Nennleistung Ladeeinrichtung [kW]">> = X) -> sub_map(charging, X);
 set_fun(<<"Art der Ladeeinrichung">> = X) -> sub_map(charging, X);
 set_fun(<<"Anzahl Ladepunkte">>) -> ignore();
-set_fun(<<"Steckertypen1">>) -> v_to_list(charing_point([charging, points, 1, plugs]));
-set_fun(<<"Steckertypen2">>) -> v_to_list(charing_point([charging, points, 2, plugs]));
-set_fun(<<"Steckertypen3">>) -> v_to_list(charing_point([charging, points, 3, plugs]));
-set_fun(<<"Steckertypen4">>) -> v_to_list(charing_point([charging, points, 4, plugs]));
-set_fun(<<"Steckertypen5">>) -> v_to_list(charing_point([charging, points, 5, plugs]));
-set_fun(<<"Steckertypen6">>) -> v_to_list(charing_point([charging, points, 6, plugs]));
-set_fun(<<"Nennleistung Stecker1">>) -> v_to_list(charing_point([charging, points, 1, power]));
-set_fun(<<"Nennleistung Stecker2">>) -> v_to_list(charing_point([charging, points, 2, power]));
-set_fun(<<"Nennleistung Stecker3">>) -> v_to_list(charing_point([charging, points, 3, power]));
-set_fun(<<"Nennleistung Stecker4">>) -> v_to_list(charing_point([charging, points, 4, power]));
-set_fun(<<"Nennleistung Stecker5">>) -> v_to_list(charing_point([charging, points, 5, power]));
-set_fun(<<"Nennleistung Stecker6">>) -> v_to_list(charing_point([charging, points, 6, power]));
-set_fun(<<"EVSE-ID1">>) -> v_to_list(charing_point([charging, points, 1, evse_id]));
-set_fun(<<"EVSE-ID2">>) -> v_to_list(charing_point([charging, points, 2, evse_id]));
-set_fun(<<"EVSE-ID3">>) -> v_to_list(charing_point([charging, points, 3, evse_id]));
-set_fun(<<"EVSE-ID4">>) -> v_to_list(charing_point([charging, points, 4, evse_id]));
-set_fun(<<"EVSE-ID5">>) -> v_to_list(charing_point([charging, points, 5, evse_id]));
-set_fun(<<"EVSE-ID6">>) -> v_to_list(charing_point([charging, points, 6, evse_id]));
-set_fun(<<"P1 [kW]">>) -> to_float(charing_point([charging, points, 1, kW]));
-set_fun(<<"P2 [kW]">>) -> to_float(charing_point([charging, points, 2, kW]));
-set_fun(<<"P3 [kW]">>) -> to_float(charing_point([charging, points, 3, kW]));
-set_fun(<<"P4 [kW]">>) -> to_float(charing_point([charging, points, 4, kW]));
-set_fun(<<"P5 [kW]">>) -> to_float(charing_point([charging, points, 5, kW]));
-set_fun(<<"P6 [kW]">>) -> to_float(charing_point([charging, points, 6, kW]));
-set_fun(<<"Public Key1">>) -> charing_point([charging, points, 1, pkey]);
-set_fun(<<"Public Key2">>) -> charing_point([charging, points, 2, pkey]);
-set_fun(<<"Public Key3">>) -> charing_point([charging, points, 3, pkey]);
-set_fun(<<"Public Key4">>) -> charing_point([charging, points, 4, pkey]);
-set_fun(<<"Public Key5">>) -> charing_point([charging, points, 5, pkey]);
-set_fun(<<"Public Key6">>) -> charing_point([charging, points, 6, pkey]);
+set_fun(<<"Steckertypen1">>) -> v_to_list(charging_point([charging, points, 1, plugs]));
+set_fun(<<"Steckertypen2">>) -> v_to_list(charging_point([charging, points, 2, plugs]));
+set_fun(<<"Steckertypen3">>) -> v_to_list(charging_point([charging, points, 3, plugs]));
+set_fun(<<"Steckertypen4">>) -> v_to_list(charging_point([charging, points, 4, plugs]));
+set_fun(<<"Steckertypen5">>) -> v_to_list(charging_point([charging, points, 5, plugs]));
+set_fun(<<"Steckertypen6">>) -> v_to_list(charging_point([charging, points, 6, plugs]));
+set_fun(<<"Nennleistung Stecker1">>) -> v_to_list(charging_point([charging, points, 1, power]));
+set_fun(<<"Nennleistung Stecker2">>) -> v_to_list(charging_point([charging, points, 2, power]));
+set_fun(<<"Nennleistung Stecker3">>) -> v_to_list(charging_point([charging, points, 3, power]));
+set_fun(<<"Nennleistung Stecker4">>) -> v_to_list(charging_point([charging, points, 4, power]));
+set_fun(<<"Nennleistung Stecker5">>) -> v_to_list(charging_point([charging, points, 5, power]));
+set_fun(<<"Nennleistung Stecker6">>) -> v_to_list(charging_point([charging, points, 6, power]));
+set_fun(<<"EVSE-ID1">>) -> v_to_list(charging_point([charging, points, 1, evse_id]));
+set_fun(<<"EVSE-ID2">>) -> v_to_list(charging_point([charging, points, 2, evse_id]));
+set_fun(<<"EVSE-ID3">>) -> v_to_list(charging_point([charging, points, 3, evse_id]));
+set_fun(<<"EVSE-ID4">>) -> v_to_list(charging_point([charging, points, 4, evse_id]));
+set_fun(<<"EVSE-ID5">>) -> v_to_list(charging_point([charging, points, 5, evse_id]));
+set_fun(<<"EVSE-ID6">>) -> v_to_list(charging_point([charging, points, 6, evse_id]));
+set_fun(<<"P1 [kW]">>) -> to_float(charging_point([charging, points, 1, kW]));
+set_fun(<<"P2 [kW]">>) -> to_float(charging_point([charging, points, 2, kW]));
+set_fun(<<"P3 [kW]">>) -> to_float(charging_point([charging, points, 3, kW]));
+set_fun(<<"P4 [kW]">>) -> to_float(charging_point([charging, points, 4, kW]));
+set_fun(<<"P5 [kW]">>) -> to_float(charging_point([charging, points, 5, kW]));
+set_fun(<<"P6 [kW]">>) -> to_float(charging_point([charging, points, 6, kW]));
+set_fun(<<"Public Key1">>) -> charging_point([charging, points, 1, pkey]);
+set_fun(<<"Public Key2">>) -> charging_point([charging, points, 2, pkey]);
+set_fun(<<"Public Key3">>) -> charging_point([charging, points, 3, pkey]);
+set_fun(<<"Public Key4">>) -> charging_point([charging, points, 4, pkey]);
+set_fun(<<"Public Key5">>) -> charging_point([charging, points, 5, pkey]);
+set_fun(<<"Public Key6">>) -> charging_point([charging, points, 6, pkey]);
 % unknown
 set_fun(X) -> erlang:error({unknown_header, X}).
 
@@ -266,7 +267,7 @@ standard_fun(X) -> fun(V, Map) -> maps:put(X, V, Map) end.
 
 sub_map(SubKey, Key) -> fun(V, Map) -> maps:put(SubKey, maps:put(Key, V, maps:get(SubKey, Map, #{})), Map) end.
 
-charing_point(KeyPath) ->
+charging_point(KeyPath) ->
   fun(V, Map) ->
     deep_put(KeyPath, V, Map)
   end.
