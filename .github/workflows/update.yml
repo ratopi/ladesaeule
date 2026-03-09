@@ -4,6 +4,8 @@ on:
   schedule:
     # Jeden Montag um 6:00 UTC
     - cron: '0 6 * * 1'
+  push:
+    branches: [ master ]
   workflow_dispatch:
 
 permissions:
