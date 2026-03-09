@@ -11,9 +11,11 @@
 -export([output_path/0, ensure_output_dir/0, open/0, close/1]).
 -export([write_begin/1, write_meta/3, write_end/1]).
 -export([read_existing_meta/0, build_meta/2]).
+-export([compress/0]).
 
 -define(OUTPUT_DIR, "./public").
 -define(OUTPUT_FILE, "./public/ladesaeulen.json").
+-define(OUTPUT_FILE_GZ, "./public/ladesaeulen.json.gz").
 
 %%%===================================================================
 %%% API
@@ -62,7 +64,7 @@ write_end(IO) ->
 %% @doc Reads the "meta" object from the existing output JSON file.
 -spec read_existing_meta() -> {ok, map()} | {error, term()}.
 read_existing_meta() ->
-  case file:read_file(?OUTPUT_FILE) of
+  case read_json_bin() of
     {ok, Bin} ->
       try
         Map = jsx:decode(Bin, [return_maps]),
@@ -98,9 +100,46 @@ build_meta(Url, LastModified) ->
     _ -> Meta0#{source_last_modified => list_to_binary(LastModified)}
   end.
 
+%% @doc Compresses the output JSON file with gzip, creating a `.json.gz` file.
+%% The uncompressed file is deleted afterwards so that only the `.gz`
+%% version remains in the output directory.
+-spec compress() -> ok | {error, term()}.
+compress() ->
+  case file:read_file(?OUTPUT_FILE) of
+    {ok, Data} ->
+      Compressed = zlib:gzip(Data),
+      case file:write_file(?OUTPUT_FILE_GZ, Compressed) of
+        ok ->
+          SizeOrig = byte_size(Data),
+          SizeGz = byte_size(Compressed),
+          io:fwrite("compressed ~p bytes -> ~p bytes (~.1f%)~n",
+                    [SizeOrig, SizeGz, SizeGz * 100.0 / max(1, SizeOrig)]),
+          file:delete(?OUTPUT_FILE),
+          ok;
+        {error, Reason} ->
+          {error, {write_gz, Reason}}
+      end;
+    {error, Reason} ->
+      {error, {read_json, Reason}}
+  end.
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% Reads the JSON content, trying the gzip version first.
+read_json_bin() ->
+  case file:read_file(?OUTPUT_FILE_GZ) of
+    {ok, GzData} ->
+      try
+        {ok, zlib:gunzip(GzData)}
+      catch
+        _:_ -> {error, invalid_gzip}
+      end;
+    {error, _} ->
+      %% Fall back to uncompressed file
+      file:read_file(?OUTPUT_FILE)
+  end.
 
 fnum(N) ->
   Bin = integer_to_binary(N),

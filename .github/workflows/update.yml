@@ -34,7 +34,7 @@ jobs:
         run: |
           mkdir -p public
           git fetch origin gh-pages --depth=1 || true
-          git checkout origin/gh-pages -- ladesaeulen.json 2>/dev/null && mv ladesaeulen.json public/ || echo "No existing ladesaeulen.json found"
+          git checkout origin/gh-pages -- ladesaeulen.json.gz 2>/dev/null && mv ladesaeulen.json.gz public/ || echo "No existing ladesaeulen.json.gz found"
 
       - name: Download and convert CSV (if changed)
         id: convert
@@ -54,5 +54,5 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./public
           publish_branch: gh-pages
-          commit_message: "Update ladesaeulen.json"
+          commit_message: "Update ladesaeulen.json.gz"
 

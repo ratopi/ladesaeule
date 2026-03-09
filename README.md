@@ -4,10 +4,13 @@ Lädt und konvertiert das offizielle Ladesäulenregister der Bundesnetzagentur i
 
 ## Online-Zugriff auf die JSON-Datei
 
-Die aktuelle `ladesaeulen.json` wird wöchentlich per [GitHub Action](#github-action) aktualisiert und ist
+Die aktuelle `ladesaeulen.json.gz` wird wöchentlich per [GitHub Action](#github-action) aktualisiert und ist
 über GitHub Pages abrufbar:
 
-**https://ratopi.github.io/ladesaeule/ladesaeulen.json**
+**https://ratopi.github.io/ladesaeule/ladesaeulen.json.gz**
+
+> **Hinweis:** Die Datei ist gzip-komprimiert (ca. 5–10 MB statt 80+ MB unkomprimiert).
+> Die meisten HTTP-Clients und Programmiersprachen können gzip transparent dekomprimieren.
 
 ## Bauen
 
@@ -102,6 +105,12 @@ Am Ende der JSON-Datei wird über `lsl_json` ein `meta`-Objekt geschrieben mit:
 - `download_time` – Zeitstempel des Downloads
 - `source_last_modified` – der `Last-Modified`-Header des HTTP-Response (Zeitstempel der Datei auf dem Server)
 
+### 7. Gzip-Komprimierung
+
+Nach dem Schreiben wird die JSON-Datei mit `zlib:gzip/1` komprimiert und als
+`ladesaeulen.json.gz` gespeichert. Die unkomprimierte Datei wird anschließend gelöscht –
+nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu halten.
+
 ### Struktur der Ausgabe
 
 ```json
@@ -166,7 +175,7 @@ Am Ende der JSON-Datei wird über `lsl_json` ein `meta`-Objekt geschrieben mit:
 | `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
 | `lsl_converter` | CSV→JSON-Konvertierung – Header-Mapping, Datenzeilen in verschachtelte Maps überführen, Ladepunkte als Array aufbauen |
-| `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben |
+| `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
 | `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, BOM-Entfernung |
 
 
@@ -194,7 +203,7 @@ Die Workflow-Datei `.github/workflows/update.yml` automatisiert die Aktualisieru
 2. **Setup** – Erlang/OTP 27 und rebar3 installieren (`erlef/setup-beam`)
 3. **Build** – Escript bauen (`rebar3 as prod escriptize`)
 4. **Test** – EUnit-Tests ausführen (`rebar3 eunit`)
-5. **Restore** – Die bestehende `ladesaeulen.json` vom `gh-pages`-Branch holen
+5. **Restore** – Die bestehende `ladesaeulen.json.gz` vom `gh-pages`-Branch holen
    (falls vorhanden), damit der Update-Check vergleichen kann
 6. **Konvertierung** – `lsl` ausführen; prüft per HEAD-Request ob sich die CSV
    geändert hat und lädt nur bei Bedarf herunter

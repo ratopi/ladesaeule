@@ -95,6 +95,7 @@ load_data(Url) ->
               lsl_json:write_meta(IO, Url, LastModified),
               lsl_json:write_end(IO),
               lsl_json:close(IO),
+              lsl_json:compress(),
               ok
           end
       end;
