@@ -38,6 +38,8 @@ Die Tests umfassen:
   unter `test/data/` (UTF-8 und ISO-8859-1), ohne HTTP-Zugriff.
 - **`cell_parser_tests`** – Unit-Tests für den CSV-Parser, u.a. für maskierte
   Zellen, Anführungszeichen in nicht-quotierten Zellen und Chunked Input.
+- **`lsl_opening_hours_tests`** – Tests für die Konvertierung der BNetzA-Öffnungszeiten
+  in das OpenStreetMap `opening_hours`-Format.
 
 ## Wie die Konvertierung abläuft
 
@@ -62,7 +64,7 @@ heruntergeladen und konvertiert.
 ### 3. CSV streamen & parsen
 
 Die CSV wird per HTTP-Streaming (`httpc`, async) heruntergeladen.
-Die empfangenen Chunks werden direkt dem `cell_parser` übergeben – einem
+Die empfangenen Chunks werden direkt dem `lsl_cell_parser` übergeben – einem
 Continuation-basierten CSV-Parser, der Semikolon-getrennte, optional in Anführungszeichen
 maskierte Zellen verarbeitet. Die Encoding-Erkennung geschieht automatisch: ein UTF-8 BOM
 wird erkannt und entfernt, ansonsten wird heuristisch zwischen UTF-8 und ISO-8859-1
@@ -83,7 +85,10 @@ Dann folgen zwei Header-Zeilen:
 
 ### 5. Datenzeilen in JSON konvertieren
 
-Jede Datenzeile wird von `lsl_converter` anhand der Spaltennamen in eine verschachtelte Map überführt:
+Jede Datenzeile wird von `lsl_converter` anhand der deklarativen Mapping-Tabelle in
+`lsl_mapping` in eine verschachtelte Map überführt. Jeder Mapping-Eintrag ist ein Tupel
+`{Type, CsvColumn, JsonPath}`, das den Typ der Konvertierung, den CSV-Spaltennamen und
+den Zielpfad im JSON beschreibt.
 
 | CSV-Spalte(n)                | JSON-Ziel                         |
 |------------------------------|-----------------------------------|
@@ -103,6 +108,17 @@ Jede Datenzeile wird von `lsl_converter` anhand der Spaltennamen in eine verscha
 
 Leere Zellen werden übersprungen. Ladepunkte ohne Daten tauchen nicht im Array auf.
 Werte mit Komma-Dezimaltrenner (z.B. Koordinaten) werden in Fließkommazahlen konvertiert.
+
+Nach dem spaltenweisen Mapping werden **Post-Processors** (ebenfalls in `lsl_mapping`
+definiert) auf jede Zeile angewandt:
+
+- **`collect_charging_points`** – wandelt die nummerierten Ladepunkt-Maps (1–6) in
+  eine einfache Liste um.
+- **`derive_osm_opening_hours`** – leitet aus den drei Öffnungszeiten-Feldern
+  (`opening_hours`, `opening_weekdays`, `opening_daytime`) einen
+  [OSM `opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-String
+  ab und speichert ihn als `access.opening_hours_osm` (z.B. `"24/7"`,
+  `"Mo-Fr 08:00-18:00; Sa-Su 10:00-16:00"`).
 
 ### 6. Meta-Informationen anhängen
 
@@ -165,15 +181,16 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
         "payment": "RFID-Karte;Onlinezahlungsverfahren",
         "parking_info": "Keine Beschränkung",
         "opening_hours": "247",
-        "opening_weekdays": "Montag; Dienstag; Mittwoch; Donnerstag; Freitag; Samstag; Sonntag",
-        "opening_daytime": "00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59"
+        "opening_weekdays": "Montag; Dienstag; ...; Sonntag",
+        "opening_daytime": "00:00-23:59; ...; 00:00-23:59",
+        "opening_hours_osm": "24/7"
       }
     }
   ],
   "meta": {
-    "source": "https://data.bundesnetzagentur.de/.../Ladesaeulenregister_BNetzA_2026-02-27.csv",
-    "download_time": "2026-03-07T14:59:36",
-    "source_last_modified": "Wed, 04 Mar 2026 14:36:31 GMT"
+    "source": "https://data.bundesnetzagentur.de/.../Ladesaeulenregister_BNetzA_2026-03-25.csv",
+    "download_time": "2026-04-01T14:59:36",
+    "source_last_modified": "Wed, 26 Mar 2026 14:36:31 GMT"
   }
 }
 ```
@@ -184,9 +201,11 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
 |-------|---------|
 | `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
-| `lsl_converter` | CSV→JSON-Konvertierung – Header-Mapping, Datenzeilen in verschachtelte Maps überführen, Ladepunkte als Array aufbauen |
+| `lsl_converter` | CSV→JSON-Konvertierung – generischer Mechanismus: Spalten-Funs anwenden, Post-Processors ausführen, JSON schreiben |
+| `lsl_mapping` | Deklarative Datenstruktur-Definition – Mapping-Tabelle (CSV-Spalte → JSON-Pfad + Typ), Setter-Erzeugung, Post-Processors |
+| `lsl_opening_hours` | Konvertierung der BNetzA-Öffnungszeiten in das OSM `opening_hours`-Format |
 | `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
-| `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |
+| `lsl_cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |
 
 
 ## GitHub Action

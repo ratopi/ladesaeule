@@ -3,7 +3,8 @@
 %%% @copyright (C) 2024-2026, Ralf Thomas Pietsch
 %%% @doc CSV to JSON conversion logic. Parses the BNetzA
 %%% Ladesäulenregister CSV format and writes structured JSON.
-%%% Uses lsl_mapping for the declarative column→JSON-path mapping.
+%%% Uses lsl_mapping for the declarative column→JSON-path mapping
+%%% and post-processing.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lsl_converter).
@@ -13,7 +14,7 @@
 
 -record(starting, {io, infos = []}).
 -record(got_header1, {io}).
--record(read_lines, {io, headers, first_line = true}).
+-record(read_lines, {io, headers, post_processors, first_line = true}).
 
 %%%===================================================================
 %%% API
@@ -67,8 +68,9 @@ handler_fun([Info | _], State = #starting{infos = Infos}) ->
 
 handler_fun(Headers2, #got_header1{io = IO}) ->
   Headers = build_headers(Headers2),
+  PostProcessors = lsl_mapping:post_processors(),
   file:write(IO, <<$[, 10>>),
-  #read_lines{headers = Headers, io = IO};
+  #read_lines{headers = Headers, post_processors = PostProcessors, io = IO};
 
 handler_fun(eof, #read_lines{io = _IO}) ->
   file:write(_IO, <<10, $]>>),
@@ -77,13 +79,13 @@ handler_fun(eof, #read_lines{io = _IO}) ->
 handler_fun([<<>> | _], State = #read_lines{}) ->
   State;
 
-handler_fun(Line, State = #read_lines{io = IO, headers = Headers, first_line = true}) ->
-  Map = build_map(Headers, Line),
+handler_fun(Line, State = #read_lines{io = IO, headers = Headers, post_processors = PPs, first_line = true}) ->
+  Map = build_map(Headers, PPs, Line),
   file:write(IO, jsx:encode(Map)),
   State#read_lines{first_line = false};
 
-handler_fun(Line, State = #read_lines{io = IO, headers = Headers}) ->
-  Map = build_map(Headers, Line),
+handler_fun(Line, State = #read_lines{io = IO, headers = Headers, post_processors = PPs}) ->
+  Map = build_map(Headers, PPs, Line),
   file:write(IO, <<$,, 10>>),
   file:write(IO, jsx:encode(Map)),
   State.
@@ -91,33 +93,19 @@ handler_fun(Line, State = #read_lines{io = IO, headers = Headers}) ->
 
 %% --- Map building ---
 
-build_map(Headers, Line) ->
-  deep_change(
-    [charging, points],
-    fun(Map) ->
-      lists:foldl(
-        fun(N, L) ->
-          case maps:get(N, Map, undefined) of
-            undefined -> L;
-            V -> [V | L]
-          end
-        end,
-        [],
-        [6, 5, 4, 3, 2, 1]
-      )
-    end,
-    build_map(Headers, Line, #{})
-  ).
+build_map(Headers, PostProcessors, Line) ->
+  RawMap = build_map_cols(Headers, Line, #{}),
+  lists:foldl(fun(PP, Map) -> PP(Map) end, RawMap, PostProcessors).
 
-build_map([], [], Map) ->
+build_map_cols([], [], Map) ->
   Map;
 
-build_map([_ | Headers], [<<>> | Line], Map) ->
-  build_map(Headers, Line, Map);
+build_map_cols([_ | Headers], [<<>> | Line], Map) ->
+  build_map_cols(Headers, Line, Map);
 
-build_map([Fun | Headers], [V | Line], Map) ->
+build_map_cols([Fun | Headers], [V | Line], Map) ->
   MV = re:replace(V, <<"(", 194, 160, ")|(\n)$">>, <<>>, [{return, binary}]),
-  build_map(Headers, Line, Fun(MV, Map)).
+  build_map_cols(Headers, Line, Fun(MV, Map)).
 
 
 %% --- Header mapping via lsl_mapping ---
@@ -134,15 +122,3 @@ build_headers(Headers) ->
     end,
     Headers
   ).
-
-
-%% --- Deep map operations ---
-
-deep_change([K], F, Map) ->
-  case maps:get(K, Map, undefined) of
-    undefined -> Map;
-    V -> maps:put(K, F(V), Map)
-  end;
-
-deep_change([K | T], F, Map) ->
-  maps:put(K, deep_change(T, F, maps:get(K, Map, #{})), Map).

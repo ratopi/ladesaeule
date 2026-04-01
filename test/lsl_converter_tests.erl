@@ -125,6 +125,16 @@ common_tests(Label, Map, ExpectedRows) ->
       ?assertMatch(#{<<"payment">> := _}, Access),
       ?assertMatch(#{<<"parking_info">> := _}, Access)
     end},
+    {iolist_to_binary([Label, " opening_hours_osm for 24/7"]), fun() ->
+      #{<<"access">> := Access247} = First,
+      ?assertEqual(<<"24/7">>, maps:get(<<"opening_hours_osm">>, Access247))
+    end},
+    {iolist_to_binary([Label, " opening_hours_osm absent when unknown"]), fun() ->
+      %% Entry 2 has "Keine Angabe" → no OSM field
+      Second = lists:nth(2, Data),
+      Access2 = maps:get(<<"access">>, Second, #{}),
+      ?assertEqual(undefined, maps:get(<<"opening_hours_osm">>, Access2, undefined))
+    end},
     {iolist_to_binary([Label, " display name"]), fun() ->
       ?assertMatch(#{<<"display_name">> := _}, First)
     end},
