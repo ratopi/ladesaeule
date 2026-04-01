@@ -58,7 +58,7 @@ Aktualisierung ändert).
 
 ### 2. Prüfen ob ein Update nötig ist
 
-`lsl_loader` liest über `lsl_json` das `meta`-Objekt aus der bestehenden
+`lsl_loader` liest über `lsl_output` das `meta`-Objekt aus der bestehenden
 `public/ladesaeulen.json` (falls vorhanden) und vergleicht:
 
 - **URL** – hat sich der Dateiname/Link geändert?
@@ -135,7 +135,7 @@ Leere Zellen werden übersprungen. Ladepunkte ohne Daten tauchen nicht im Array 
 
 ### 6. Meta-Informationen anhängen
 
-Am Ende der JSON-Datei wird über `lsl_json` ein `meta`-Objekt geschrieben mit:
+Am Ende der JSON-Datei wird über `lsl_output` ein `meta`-Objekt geschrieben mit:
 
 - `source` – die URL der CSV-Datei
 - `download_time` – Zeitstempel des Downloads
@@ -205,12 +205,25 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
 |-------|---------|
 | `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
-| `lsl_converter` | CSV→JSON-Orchestrierung – parst den CSV-Stream, trennt Info-/Header-/Datenzeilen und schreibt JSON |
+| `lsl_converter` | CSV→JSON-Orchestrierung – parst den CSV-Stream, trennt Info-/Header-/Datenzeilen und schreibt JSON über `lsl_output` |
 | `lsl_mapping` | Deklarative Zielstruktur-Definition – beschreibt die gewünschte JSON-Hierarchie, Typ-Konverter und OSM-Übersetzungstabellen |
 | `lsl_row` | Zeilenweise Konvertierung – wandert den Mapping-Baum und baut aus einer CSV-Zeile die JSON-Map |
 | `lsl_opening_hours` | Konvertierung der BNetzA-Öffnungszeiten in das OSM [`opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-Format |
-| `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
+| `lsl_output` | Datei-I/O – Ausgabedatei öffnen/schließen, JSON schreiben, Meta-Daten lesen, gzip-Komprimierung. Kapselt den Datei-Handle in einem opaken Record |
+| `lsl_json` | Dünner Wrapper um `jsx` – JSON-Encoding/-Decoding und Aufbau des Meta-Objekts |
 | `lsl_cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |
+
+## Konfiguration
+
+Alle konfigurierbaren Parameter sind zentral in `src/lsl.app.src` unter `{env, [...]}` definiert:
+
+| Parameter | Default | Beschreibung |
+|---|---|---|
+| `source_page_url` | `https://www.bundesnetzagentur.de/…/start.html` | URL der BNetzA-Seite, von der die CSV-URL extrahiert wird |
+| `output_dir` | `./public` | Ausgabeverzeichnis |
+| `output_file` | `./public/ladesaeulen.json` | Pfad der JSON-Ausgabedatei |
+| `output_file_gz` | `./public/ladesaeulen.json.gz` | Pfad der gzip-komprimierten Ausgabedatei |
+| `stream_timeout` | `10000` | Timeout in ms für HTTP-Stream-Chunks |
 
 
 ## GitHub Action
