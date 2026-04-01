@@ -23,7 +23,7 @@
 %% Returns a continuation function for feeding binary chunks.
 -spec new_parser(file:io_device()) -> fun((binary() | eof) -> term()).
 new_parser(IO) ->
-  cell_parser:start(fun handler_fun/2, #starting{io = IO}).
+  lsl_cell_parser:start(fun handler_fun/2, #starting{io = IO}).
 
 
 %% @doc Converts a local CSV file to JSON. Used for testing.

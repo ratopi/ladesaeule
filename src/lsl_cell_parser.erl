@@ -9,7 +9,7 @@
 %%% @end
 %%% Created : 01. Dez 2023 03:25
 %%%-------------------------------------------------------------------
--module(cell_parser).
+-module(lsl_cell_parser).
 -author("Ralf Thomas Pietsch <ratopi@abwesend.de>").
 
 %% API

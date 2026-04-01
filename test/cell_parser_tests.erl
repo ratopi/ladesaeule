@@ -14,7 +14,7 @@ parse_collect(Bin) ->
 		(eof, Acc) -> lists:reverse(Acc);
 		(Line, Acc) -> [Line | Acc]
 	end,
-	Parser = cell_parser:start(Callback, []),
+	Parser = lsl_cell_parser:start(Callback, []),
 	(Parser(Bin))(eof).
 
 
@@ -67,7 +67,7 @@ chunked_input_test() ->
 		(eof, Acc) -> lists:reverse(Acc);
 		(Line, Acc) -> [Line | Acc]
 	end,
-	Parser = cell_parser:start(Callback, []),
+	Parser = lsl_cell_parser:start(Callback, []),
 	Parser2 = Parser(<<"abc;d">>),
 	Parser3 = Parser2(<<"ef\n">>),
 	Result = Parser3(eof),
@@ -79,7 +79,7 @@ chunked_quote_test() ->
 		(eof, Acc) -> lists:reverse(Acc);
 		(Line, Acc) -> [Line | Acc]
 	end,
-	Parser = cell_parser:start(Callback, []),
+	Parser = lsl_cell_parser:start(Callback, []),
 	Parser2 = Parser(<<"abc">>),
 	Parser3 = Parser2(<<"\"def;ghi\n">>),
 	Result = Parser3(eof),
