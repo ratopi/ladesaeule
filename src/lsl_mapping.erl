@@ -50,11 +50,11 @@ mappings() ->
     {float,  <<"Breitengrad">>,                      [geo, lat]},
     {float,  <<"Längengrad"/utf8>>,                  [geo, lon]},
     {string, <<"Standortbezeichnung">>,              [location_name]},
-    {string, <<"Informationen zum Parkraum">>,       [parking_info]},
-    {string, <<"Bezahlsysteme">>,                    [payment]},
-    {string, <<"Öffnungszeiten"/utf8>>,              [opening_hours]},
-    {string, <<"Öffnungszeiten: Wochentage"/utf8>>,  [opening_weekdays]},
-    {string, <<"Öffnungszeiten: Tageszeiten"/utf8>>, [opening_daytime]}
+    {string, <<"Informationen zum Parkraum">>,       [access, parking_info]},
+    {string, <<"Bezahlsysteme">>,                    [access, payment]},
+    {string, <<"Öffnungszeiten"/utf8>>,              [access, opening_hours]},
+    {string, <<"Öffnungszeiten: Wochentage"/utf8>>,  [access, opening_weekdays]},
+    {string, <<"Öffnungszeiten: Tageszeiten"/utf8>>, [access, opening_daytime]}
   ] ++
   %% --- Ladepunkte 1–6 ---
   lists:append([charging_point_mappings(N) || N <- lists:seq(1, 6)]).

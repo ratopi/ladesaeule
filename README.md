@@ -95,9 +95,9 @@ Jede Datenzeile wird von `lsl_converter` anhand der Spaltennamen in eine verscha
 | Straße, Hausnummer, …       | `addr { Straße, Hausnummer, … }`  |
 | Breitengrad, Längengrad     | `geo { lat, lon }` (als Zahlen)   |
 | Standortbezeichnung         | `location_name`                   |
-| Informationen zum Parkraum  | `parking_info`                    |
-| Bezahlsysteme               | `payment`                         |
-| Öffnungszeiten, …           | `opening_hours`, `opening_weekdays`, `opening_daytime` |
+| Informationen zum Parkraum  | `access.parking_info`             |
+| Bezahlsysteme               | `access.payment`                  |
+| Öffnungszeiten, …           | `access { opening_hours, opening_weekdays, opening_daytime }` |
 | Inbetriebnahmedatum, …      | `charging { Inbetriebnahmedatum, Nennleistung … }` |
 | Steckertypen1–6, P1–6, …   | `charging.points[]` – Array mit je `plugs`, `power`, `kW`, `evse_id`, `pkey` |
 
@@ -161,10 +161,13 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
           }
         ]
       },
-      "payment": "RFID-Karte;Onlinezahlungsverfahren",
-      "opening_hours": "247",
-      "opening_weekdays": "Montag; Dienstag; Mittwoch; Donnerstag; Freitag; Samstag; Sonntag",
-      "opening_daytime": "00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59"
+      "access": {
+        "payment": "RFID-Karte;Onlinezahlungsverfahren",
+        "parking_info": "Keine Beschränkung",
+        "opening_hours": "247",
+        "opening_weekdays": "Montag; Dienstag; Mittwoch; Donnerstag; Freitag; Samstag; Sonntag",
+        "opening_daytime": "00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59; 00:00-23:59"
+      }
     }
   ],
   "meta": {

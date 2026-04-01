@@ -116,16 +116,17 @@ common_tests(Label, Map, ExpectedRows) ->
       #{<<"plugs">> := Plugs2} = P2E,
       ?assertEqual(2, length(Plugs2))
     end},
-    {iolist_to_binary([Label, " opening hours fields"]), fun() ->
-      ?assertMatch(#{<<"opening_hours">> := _}, First),
-      ?assertMatch(#{<<"opening_weekdays">> := _}, First),
-      ?assertMatch(#{<<"opening_daytime">> := _}, First)
+    {iolist_to_binary([Label, " access fields"]), fun() ->
+      ?assertMatch(#{<<"access">> := _}, First),
+      #{<<"access">> := Access} = First,
+      ?assertMatch(#{<<"opening_hours">> := _}, Access),
+      ?assertMatch(#{<<"opening_weekdays">> := _}, Access),
+      ?assertMatch(#{<<"opening_daytime">> := _}, Access),
+      ?assertMatch(#{<<"payment">> := _}, Access),
+      ?assertMatch(#{<<"parking_info">> := _}, Access)
     end},
     {iolist_to_binary([Label, " display name"]), fun() ->
       ?assertMatch(#{<<"display_name">> := _}, First)
-    end},
-    {iolist_to_binary([Label, " payment info"]), fun() ->
-      ?assertMatch(#{<<"payment">> := _}, First)
     end},
     {iolist_to_binary([Label, " Adresszusatz"]), fun() ->
       Entry7 = lists:nth(7, Data),
@@ -138,9 +139,6 @@ common_tests(Label, Map, ExpectedRows) ->
     {iolist_to_binary([Label, " location name"]), fun() ->
       Entry = lists:nth(7, Data),
       ?assertMatch(#{<<"location_name">> := _}, Entry)
-    end},
-    {iolist_to_binary([Label, " parking info"]), fun() ->
-      ?assertMatch(#{<<"parking_info">> := _}, First)
     end}
   ].
 
