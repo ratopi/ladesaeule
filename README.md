@@ -2,6 +2,11 @@
 
 Lädt und konvertiert das offizielle Ladesäulenregister der Bundesnetzagentur in ein besser brauchbares JSON-Format.
 
+Attribut-Werte orientieren sich, wo möglich, am
+[OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dcharging_station)-Standard
+für Ladestationen – insbesondere bei Status, Zahlungsmitteln, Zugangs­beschränkungen und
+Öffnungszeiten.
+
 ## Online-Zugriff auf die JSON-Datei
 
 Die aktuelle `ladesaeulen.json.gz` wird wöchentlich per [GitHub Action](#github-action) aktualisiert und ist
@@ -9,7 +14,7 @@ Die aktuelle `ladesaeulen.json.gz` wird wöchentlich per [GitHub Action](#github
 
 **https://ratopi.github.io/ladesaeule/ladesaeulen.json.gz**
 
-> **Hinweis:** Die Datei ist gzip-komprimiert (ca. 5–10 MB statt 80+ MB unkomprimiert).
+> **Hinweis:** Die Datei ist gzip-komprimiert (ca. 8 MB statt ca. 67 MB unkomprimiert).
 > Die meisten HTTP-Clients und Programmiersprachen können gzip transparent dekomprimieren.
 
 ## Bauen
@@ -85,10 +90,11 @@ Dann folgen zwei Header-Zeilen:
 
 ### 5. Datenzeilen in JSON konvertieren
 
-Jede Datenzeile wird von `lsl_converter` anhand der deklarativen Mapping-Tabelle in
-`lsl_mapping` in eine verschachtelte Map überführt. Jeder Mapping-Eintrag ist ein Tupel
-`{Type, CsvColumn, JsonPath}`, das den Typ der Konvertierung, den CSV-Spaltennamen und
-den Zielpfad im JSON beschreibt. Alle JSON-Keys sind englisch.
+Jede Datenzeile wird von `lsl_row` anhand der deklarativen Mapping-Definition in
+`lsl_mapping` in eine verschachtelte Map überführt. Das Mapping beschreibt die
+gewünschte JSON-Zielstruktur – inklusive Verschachtelungen, Typ-Konvertierungen,
+Übersetzungstabellen und der Zusammenführung mehrerer Quellspalten.
+Alle JSON-Keys sind englisch.
 
 | CSV-Spalte(n)                | JSON-Ziel                         | Typ / Konvertierung |
 |------------------------------|--------------------------------------------|---------------------|
@@ -102,9 +108,9 @@ den Zielpfad im JSON beschreibt. Alle JSON-Keys sind englisch.
 | Straße, Hausnummer, …       | `addr { street, house_number, postcode, city, state, district, address_extra }` | string |
 | Breitengrad, Längengrad     | `geo { lat, lon }`                         | float |
 | Standortbezeichnung         | `location_name`                            | string |
-| Informationen zum Parkraum  | `access.parking`                           | → OSM: `yes`, `customers` |
-| Bezahlsysteme               | `access.payment`                           | → Array von OSM-Tags (s.u.) |
-| Öffnungszeiten + Wochentage + Tageszeiten | `access.opening_hours`       | → OSM `opening_hours` (z.B. `24/7`) |
+| Informationen zum Parkraum  | `access.parking`                           | → OSM [`access`](https://wiki.openstreetmap.org/wiki/Key:access): `yes`, `customers` |
+| Bezahlsysteme               | `access.payment`                           | → Array von OSM [`payment:*`](https://wiki.openstreetmap.org/wiki/Key:payment)-Tags (s.u.) |
+| Öffnungszeiten + Wochentage + Tageszeiten | `access.opening_hours`       | → OSM [`opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours) (z.B. `24/7`) |
 | Steckertypen1–6, …          | `charging.points[]`                        | Array mit `plugs`, `power`, `kW`, `evse_id`, `pkey` |
 
 **Payment-Mapping (BNetzA → OSM):**
@@ -124,16 +130,6 @@ den Zielpfad im JSON beschreibt. Alle JSON-Keys sind englisch.
 
 Leere Zellen werden übersprungen. Ladepunkte ohne Daten tauchen nicht im Array auf.
 
-Nach dem spaltenweisen Mapping werden **Post-Processors** (ebenfalls in `lsl_mapping`
-definiert) auf jede Zeile angewandt:
-
-- **`collect_charging_points`** – wandelt die nummerierten Ladepunkt-Maps (1–6) in eine Liste um
-- **`normalise_status`** – übersetzt Status in OSM-Werte
-- **`normalise_device_type`** – übersetzt Ladeeinrichtungsart in `normal`/`rapid`
-- **`normalise_payment`** – splittet Bezahlsysteme in ein Array von OSM-Tags
-- **`normalise_parking`** – übersetzt Parkraum-Info in OSM-Access-Tag
-- **`derive_opening_hours`** – leitet aus den BNetzA-Öffnungszeiten einen
-  [OSM `opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-String ab
 
 ### 6. Meta-Informationen anhängen
 
@@ -207,9 +203,10 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
 |-------|---------|
 | `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
-| `lsl_converter` | CSV→JSON-Konvertierung – generischer Mechanismus: Spalten-Funs anwenden, Post-Processors ausführen, JSON schreiben |
-| `lsl_mapping` | Deklarative Datenstruktur-Definition – Mapping-Tabelle, Typ-Konverter, OSM-Normalisierungen, Post-Processors |
-| `lsl_opening_hours` | Konvertierung der BNetzA-Öffnungszeiten in das OSM `opening_hours`-Format |
+| `lsl_converter` | CSV→JSON-Orchestrierung – parst den CSV-Stream, trennt Info-/Header-/Datenzeilen und schreibt JSON |
+| `lsl_mapping` | Deklarative Zielstruktur-Definition – beschreibt die gewünschte JSON-Hierarchie, Typ-Konverter und OSM-Übersetzungstabellen |
+| `lsl_row` | Zeilenweise Konvertierung – wandert den Mapping-Baum und baut aus einer CSV-Zeile die JSON-Map |
+| `lsl_opening_hours` | Konvertierung der BNetzA-Öffnungszeiten in das OSM [`opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-Format |
 | `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
 | `lsl_cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |
 
