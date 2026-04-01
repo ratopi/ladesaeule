@@ -57,4 +57,5 @@ jobs:
           publish_dir: ./public
           publish_branch: gh-pages
           commit_message: "Update ladesaeulen.json.gz"
+          force_orphan: true
 
