@@ -88,37 +88,52 @@ Dann folgen zwei Header-Zeilen:
 Jede Datenzeile wird von `lsl_converter` anhand der deklarativen Mapping-Tabelle in
 `lsl_mapping` in eine verschachtelte Map überführt. Jeder Mapping-Eintrag ist ein Tupel
 `{Type, CsvColumn, JsonPath}`, das den Typ der Konvertierung, den CSV-Spaltennamen und
-den Zielpfad im JSON beschreibt.
+den Zielpfad im JSON beschreibt. Alle JSON-Keys sind englisch.
 
-| CSV-Spalte(n)                | JSON-Ziel                         |
-|------------------------------|-----------------------------------|
-| Ladeeinrichtungs-ID         | `id`                              |
-| Betreiber                   | `operator`                        |
-| Anzeigename (Karte)         | `display_name`                    |
-| Status                      | `status`                          |
-| Art der Ladeeinrichtung     | `device_type`                     |
-| Straße, Hausnummer, …       | `addr { Straße, Hausnummer, … }`  |
-| Breitengrad, Längengrad     | `geo { lat, lon }` (als Zahlen)   |
-| Standortbezeichnung         | `location_name`                   |
-| Informationen zum Parkraum  | `access.parking_info`             |
-| Bezahlsysteme               | `access.payment`                  |
-| Öffnungszeiten, …           | `access { opening_hours, opening_weekdays, opening_daytime }` |
-| Inbetriebnahmedatum, …      | `charging { Inbetriebnahmedatum, Nennleistung … }` |
-| Steckertypen1–6, P1–6, …   | `charging.points[]` – Array mit je `plugs`, `power`, `kW`, `evse_id`, `pkey` |
+| CSV-Spalte(n)                | JSON-Ziel                         | Typ / Konvertierung |
+|------------------------------|--------------------------------------------|---------------------|
+| Ladeeinrichtungs-ID         | `id`                                       | string |
+| Betreiber                   | `operator`                                 | string |
+| Anzeigename (Karte)         | `display_name`                             | string |
+| Status                      | `status`                                   | → OSM: `operational`, `planned`, `broken`, `disused`, `construction` |
+| Art der Ladeeinrichtung     | `device_type`                              | → `normal` / `rapid` |
+| Nennleistung [kW]           | `charging.rated_power_kw`                  | Zahl (float) |
+| Inbetriebnahmedatum         | `charging.commissioning_date`              | ISO 8601 (`YYYY-MM-DD`) |
+| Straße, Hausnummer, …       | `addr { street, house_number, postcode, city, state, district, address_extra }` | string |
+| Breitengrad, Längengrad     | `geo { lat, lon }`                         | float |
+| Standortbezeichnung         | `location_name`                            | string |
+| Informationen zum Parkraum  | `access.parking`                           | → OSM: `yes`, `customers` |
+| Bezahlsysteme               | `access.payment`                           | → Array von OSM-Tags (s.u.) |
+| Öffnungszeiten + Wochentage + Tageszeiten | `access.opening_hours`       | → OSM `opening_hours` (z.B. `24/7`) |
+| Steckertypen1–6, …          | `charging.points[]`                        | Array mit `plugs`, `power`, `kW`, `evse_id`, `pkey` |
+
+**Payment-Mapping (BNetzA → OSM):**
+
+| BNetzA-Wert | OSM-Tag |
+|---|---|
+| Onlinezahlungsverfahren | `app` |
+| RFID-Karte | `rfid` |
+| Kreditkarte (NFC) | `contactless:credit_cards` |
+| Kreditkarte (Lesegerät) | `credit_cards` |
+| Debitkarte (NFC) | `contactless:debit_cards` |
+| Debitkarte (Lesegerät) | `debit_cards` |
+| Plug & Charge | `plug_and_charge` |
+| Bargeld | `cash` |
+| Kostenlos | `free` |
+| Sonstige | `other` |
 
 Leere Zellen werden übersprungen. Ladepunkte ohne Daten tauchen nicht im Array auf.
-Werte mit Komma-Dezimaltrenner (z.B. Koordinaten) werden in Fließkommazahlen konvertiert.
 
 Nach dem spaltenweisen Mapping werden **Post-Processors** (ebenfalls in `lsl_mapping`
 definiert) auf jede Zeile angewandt:
 
-- **`collect_charging_points`** – wandelt die nummerierten Ladepunkt-Maps (1–6) in
-  eine einfache Liste um.
-- **`derive_osm_opening_hours`** – leitet aus den drei Öffnungszeiten-Feldern
-  (`opening_hours`, `opening_weekdays`, `opening_daytime`) einen
-  [OSM `opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-String
-  ab und speichert ihn als `access.opening_hours_osm` (z.B. `"24/7"`,
-  `"Mo-Fr 08:00-18:00; Sa-Su 10:00-16:00"`).
+- **`collect_charging_points`** – wandelt die nummerierten Ladepunkt-Maps (1–6) in eine Liste um
+- **`normalise_status`** – übersetzt Status in OSM-Werte
+- **`normalise_device_type`** – übersetzt Ladeeinrichtungsart in `normal`/`rapid`
+- **`normalise_payment`** – splittet Bezahlsysteme in ein Array von OSM-Tags
+- **`normalise_parking`** – übersetzt Parkraum-Info in OSM-Access-Tag
+- **`derive_opening_hours`** – leitet aus den BNetzA-Öffnungszeiten einen
+  [OSM `opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-String ab
 
 ### 6. Meta-Informationen anhängen
 
@@ -148,42 +163,33 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
       "id": "1010338",
       "operator": "Albwerk Elektro- und Kommunikationstechnik GmbH",
       "display_name": "Albwerk Elektro- und Kommunikationstechnik GmbH",
-      "status": "In Betrieb",
-      "device_type": "Normalladeeinrichtung",
+      "status": "operational",
+      "device_type": "normal",
       "addr": {
-        "Straße": "Am Berg",
-        "Hausnummer": "1",
-        "Postleitzahl": "72535",
-        "Ort": "Heroldstatt",
-        "Bundesland": "Baden-Württemberg",
-        "Kreis/kreisfreie Stadt": "Landkreis Alb-Donau-Kreis"
+        "street": "Am Berg",
+        "house_number": "1",
+        "postcode": "72535",
+        "city": "Heroldstatt",
+        "state": "Baden-Württemberg",
+        "district": "Landkreis Alb-Donau-Kreis"
       },
       "geo": { "lat": 48.442398, "lon": 9.659075 },
       "charging": {
-        "Inbetriebnahmedatum": "11.01.2020",
-        "Nennleistung Ladeeinrichtung [kW]": "22",
+        "commissioning_date": "2020-01-11",
+        "rated_power_kw": 22,
         "points": [
           {
             "plugs": ["AC Typ 2 Steckdose"],
             "power": ["22"],
             "evse_id": ["DEAEWE002501"],
             "pkey": "CA49E2E0..."
-          },
-          {
-            "plugs": ["AC Typ 2 Steckdose"],
-            "power": ["22"],
-            "evse_id": ["DEAEWE002502"],
-            "pkey": "AC676D2E..."
           }
         ]
       },
       "access": {
-        "payment": "RFID-Karte;Onlinezahlungsverfahren",
-        "parking_info": "Keine Beschränkung",
-        "opening_hours": "247",
-        "opening_weekdays": "Montag; Dienstag; ...; Sonntag",
-        "opening_daytime": "00:00-23:59; ...; 00:00-23:59",
-        "opening_hours_osm": "24/7"
+        "payment": ["rfid", "app"],
+        "parking": "yes",
+        "opening_hours": "24/7"
       }
     }
   ],
@@ -202,7 +208,7 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
 | `lsl` | Escript-Einstiegspunkt – startet die Anwendungen und orchestriert den Ablauf |
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
 | `lsl_converter` | CSV→JSON-Konvertierung – generischer Mechanismus: Spalten-Funs anwenden, Post-Processors ausführen, JSON schreiben |
-| `lsl_mapping` | Deklarative Datenstruktur-Definition – Mapping-Tabelle (CSV-Spalte → JSON-Pfad + Typ), Setter-Erzeugung, Post-Processors |
+| `lsl_mapping` | Deklarative Datenstruktur-Definition – Mapping-Tabelle, Typ-Konverter, OSM-Normalisierungen, Post-Processors |
 | `lsl_opening_hours` | Konvertierung der BNetzA-Öffnungszeiten in das OSM `opening_hours`-Format |
 | `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
 | `lsl_cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |

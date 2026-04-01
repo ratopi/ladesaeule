@@ -8,9 +8,11 @@
 %%%
 %%% where:
 %%%   Type      :: string         – value is copied as-is (binary)
+%%%            | integer         – parsed as integer
 %%%            | float           – comma-decimal converted to float
-%%%            | list            – semicolon-separated value split into list
-%%%            | list_float      – semicolon-separated, each element to float
+%%%            | date            – DD.MM.YYYY converted to ISO 8601 (YYYY-MM-DD)
+%%%            | list            – semicolon-separated value split into list of strings
+%%%            | {list, Type}    – semicolon-separated, each element converted by Type
 %%%            | ignore          – column is skipped
 %%%   CsvColumn :: binary()      – the CSV column header (2nd header row)
 %%%   JsonPath  :: [atom()]      – the path in the output JSON map
@@ -33,48 +35,53 @@
 mappings() ->
   %% --- Allgemeine Informationen ---
   [
-    {string, <<"Ladeeinrichtungs-ID">>,              [id]},
-    {string, <<"Betreiber">>,                        [operator]},
-    {string, <<"Anzeigename (Karte)">>,              [display_name]},
-    {string, <<"Status">>,                           [status]},
-    {string, <<"Art der Ladeeinrichtung">>,          [device_type]},
-    {ignore, <<"Anzahl Ladepunkte">>,                []},
-    {string, <<"Nennleistung Ladeeinrichtung [kW]">>, [charging, <<"Nennleistung Ladeeinrichtung [kW]">>]},
-    {string, <<"Inbetriebnahmedatum">>,              [charging, <<"Inbetriebnahmedatum">>]},
-    {string, <<"Art der Ladeeinrichung">>,           [charging, <<"Art der Ladeeinrichung">>]},
-    {string, <<"Straße"/utf8>>,                      [addr, <<"Straße"/utf8>>]},
-    {string, <<"Hausnummer">>,                       [addr, <<"Hausnummer">>]},
-    {string, <<"Adresszusatz">>,                     [addr, <<"Adresszusatz">>]},
-    {string, <<"Postleitzahl">>,                     [addr, <<"Postleitzahl">>]},
-    {string, <<"Ort">>,                              [addr, <<"Ort">>]},
-    {string, <<"Bundesland">>,                       [addr, <<"Bundesland">>]},
-    {string, <<"Kreis/kreisfreie Stadt">>,           [addr, <<"Kreis/kreisfreie Stadt">>]},
-    {float,  <<"Breitengrad">>,                      [geo, lat]},
-    {float,  <<"Längengrad"/utf8>>,                  [geo, lon]},
-    {string, <<"Standortbezeichnung">>,              [location_name]},
-    {string, <<"Informationen zum Parkraum">>,       [access, parking_info]},
-    {string, <<"Bezahlsysteme">>,                    [access, payment]},
-    {string, <<"Öffnungszeiten"/utf8>>,              [access, opening_hours]},
-    {string, <<"Öffnungszeiten: Wochentage"/utf8>>,  [access, opening_weekdays]},
-    {string, <<"Öffnungszeiten: Tageszeiten"/utf8>>, [access, opening_daytime]}
+    {string,  <<"Ladeeinrichtungs-ID">>,               [id]},
+    {string,  <<"Betreiber">>,                         [operator]},
+    {string,  <<"Anzeigename (Karte)">>,               [display_name]},
+    {string,  <<"Status">>,                            [status]},
+    {string,  <<"Art der Ladeeinrichtung">>,           [device_type]},
+    {ignore,  <<"Anzahl Ladepunkte">>,                 []},
+    {float,   <<"Nennleistung Ladeeinrichtung [kW]">>, [charging, rated_power_kw]},
+    {date,    <<"Inbetriebnahmedatum">>,               [charging, commissioning_date]},
+    {string,  <<"Art der Ladeeinrichung">>,            [charging, device_type]},
+    {string,  <<"Straße"/utf8>>,                       [addr, street]},
+    {string,  <<"Hausnummer">>,                        [addr, house_number]},
+    {string,  <<"Adresszusatz">>,                      [addr, address_extra]},
+    {string,  <<"Postleitzahl">>,                      [addr, postcode]},
+    {string,  <<"Ort">>,                               [addr, city]},
+    {string,  <<"Bundesland">>,                        [addr, state]},
+    {string,  <<"Kreis/kreisfreie Stadt">>,            [addr, district]},
+    {float,   <<"Breitengrad">>,                       [geo, lat]},
+    {float,   <<"Längengrad"/utf8>>,                   [geo, lon]},
+    {string,  <<"Standortbezeichnung">>,               [location_name]},
+    {string,  <<"Informationen zum Parkraum">>,        [access, parking]},
+    {string,  <<"Bezahlsysteme">>,                     [access, payment]},
+    {string,  <<"Öffnungszeiten"/utf8>>,               [access, 'opening_hours_raw']},
+    {string,  <<"Öffnungszeiten: Wochentage"/utf8>>,   [access, 'opening_weekdays_raw']},
+    {string,  <<"Öffnungszeiten: Tageszeiten"/utf8>>,  [access, 'opening_daytime_raw']}
   ] ++
   %% --- Ladepunkte 1–6 ---
   lists:append([charging_point_mappings(N) || N <- lists:seq(1, 6)]).
 
 
 %% @doc Builds a setter function `fun(Value, Map) -> Map' from a mapping entry.
--spec build_fun({atom(), binary(), [atom()]}) -> fun((term(), map()) -> map()).
+-spec build_fun({atom() | tuple(), binary(), [atom()]}) -> fun((term(), map()) -> map()).
 build_fun({ignore, _, _}) ->
   fun(_, Map) -> Map end;
 build_fun({string, _, Path}) ->
   fun(V, Map) -> deep_put(Path, V, Map) end;
+build_fun({integer, _, Path}) ->
+  fun(V, Map) -> deep_put(Path, to_integer(V), Map) end;
 build_fun({float, _, Path}) ->
   fun(V, Map) -> deep_put(Path, to_float(V), Map) end;
+build_fun({date, _, Path}) ->
+  fun(V, Map) -> deep_put(Path, to_iso_date(V), Map) end;
 build_fun({list, _, Path}) ->
   fun(V, Map) -> deep_put(Path, split_list(V), Map) end;
-build_fun({list_float, _, Path}) ->
+build_fun({{list, ElementType}, _, Path}) ->
+  ElementFun = converter(ElementType),
   fun(V, Map) ->
-    Vals = lists:map(fun to_float/1, split_list(V)),
+    Vals = lists:map(ElementFun, split_list(V)),
     deep_put(Path, Vals, Map)
   end.
 
@@ -85,7 +92,11 @@ build_fun({list_float, _, Path}) ->
 post_processors() ->
   [
     fun collect_charging_points/1,
-    fun derive_osm_opening_hours/1
+    fun normalise_status/1,
+    fun normalise_device_type/1,
+    fun normalise_payment/1,
+    fun normalise_parking/1,
+    fun derive_opening_hours/1
   ].
 
 
@@ -107,12 +118,29 @@ charging_point_mappings(N) ->
 
 %% --- value conversion ---
 
+%% Returns a fun/1 that converts a single value according to Type.
+converter(string)  -> fun(V) -> V end;
+converter(integer) -> fun to_integer/1;
+converter(float)   -> fun to_float/1;
+converter(date)    -> fun to_iso_date/1.
+
+to_integer(V) when is_binary(V) ->
+  binary_to_integer(V);
+to_integer(V) ->
+  V.
+
 to_float(V) when is_binary(V) ->
   case string:split(V, <<$,>>) of
     [A, B] -> binary_to_float(<<A/binary, $., B/binary>>);
     [_]    -> binary_to_integer(V)
   end;
 to_float(V) ->
+  V.
+
+%% Convert DD.MM.YYYY to YYYY-MM-DD (ISO 8601).
+to_iso_date(<<D1, D2, $., M1, M2, $., Y1, Y2, Y3, Y4>>) ->
+  <<Y1, Y2, Y3, Y4, $-, M1, M2, $-, D1, D2>>;
+to_iso_date(V) ->
   V.
 
 split_list(V) ->
@@ -140,19 +168,87 @@ collect_charging_points(Map) ->
     Map
   ).
 
-%% Derives an OSM `opening_hours' string from the three BNetzA access
-%% fields and stores it as `access.opening_hours_osm'.
-derive_osm_opening_hours(Map) ->
+%% Translates BNetzA status values to OSM-style status tags.
+normalise_status(Map) ->
+  case maps:get(status, Map, undefined) of
+    undefined -> Map;
+    V -> maps:put(status, status_to_osm(V), Map)
+  end.
+
+%% Translates BNetzA device type to an English charging level tag.
+normalise_device_type(Map) ->
+  case maps:get(device_type, Map, undefined) of
+    undefined -> Map;
+    V -> maps:put(device_type, device_type_to_osm(V), Map)
+  end.
+
+%% Converts the semicolon-separated payment string into a list of
+%% OSM-style payment tags.
+normalise_payment(Map) ->
   Access = maps:get(access, Map, #{}),
-  Hours    = maps:get(opening_hours, Access, <<>>),
-  Weekdays = maps:get(opening_weekdays, Access, <<>>),
-  Daytime  = maps:get(opening_daytime, Access, <<>>),
+  case maps:get(payment, Access, undefined) of
+    undefined -> Map;
+    V ->
+      Tags = [payment_to_osm(string:trim(P))
+              || P <- string:split(V, <<$;>>, all),
+                 string:trim(P) =/= <<>>],
+      maps:put(access, maps:put(payment, Tags, Access), Map)
+  end.
+
+%% Translates BNetzA parking restriction to OSM access tag.
+normalise_parking(Map) ->
+  Access = maps:get(access, Map, #{}),
+  case maps:get(parking, Access, undefined) of
+    undefined -> Map;
+    V -> maps:put(access, maps:put(parking, parking_to_osm(V), Access), Map)
+  end.
+
+%% Derives an OSM `opening_hours' string from the three raw
+%% opening-hours fields, writes it as `access.opening_hours',
+%% and removes the raw helper fields.
+derive_opening_hours(Map) ->
+  Access0 = maps:get(access, Map, #{}),
+  Hours    = maps:get('opening_hours_raw', Access0, <<>>),
+  Weekdays = maps:get('opening_weekdays_raw', Access0, <<>>),
+  Daytime  = maps:get('opening_daytime_raw', Access0, <<>>),
+  Access1 = maps:without(['opening_hours_raw', 'opening_weekdays_raw', 'opening_daytime_raw'], Access0),
   case lsl_opening_hours:to_osm(Hours, Weekdays, Daytime) of
     {ok, OsmValue} ->
-      maps:put(access, maps:put(opening_hours_osm, OsmValue, Access), Map);
+      maps:put(access, maps:put(opening_hours, OsmValue, Access1), Map);
     undefined ->
-      Map
+      maps:put(access, Access1, Map)
   end.
+
+%% --- value translation tables ---
+
+status_to_osm(<<"In Betrieb">>)     -> <<"operational">>;
+status_to_osm(<<"In Planung">>)     -> <<"planned">>;
+status_to_osm(<<"Außer Betrieb"/utf8>>)  -> <<"broken">>;
+status_to_osm(<<"Stillgelegt">>)    -> <<"disused">>;
+status_to_osm(<<"Im Bau">>)         -> <<"construction">>;
+status_to_osm(Other)                -> Other.
+
+device_type_to_osm(<<"Normalladeeinrichtung">>)  -> <<"normal">>;
+device_type_to_osm(<<"Schnellladeeinrichtung">>) -> <<"rapid">>;
+device_type_to_osm(Other)                        -> Other.
+
+payment_to_osm(<<"Onlinezahlungsverfahren">>)        -> <<"app">>;
+payment_to_osm(<<"RFID-Karte">>)                     -> <<"rfid">>;
+payment_to_osm(<<"Kreditkarte (NFC)">>)              -> <<"contactless:credit_cards">>;
+payment_to_osm(<<"Kreditkarte (Lesegerät)"/utf8>>)   -> <<"credit_cards">>;
+payment_to_osm(<<"Debitkarte (NFC)">>)               -> <<"contactless:debit_cards">>;
+payment_to_osm(<<"Debitkarte (Lesegerät)"/utf8>>)    -> <<"debit_cards">>;
+payment_to_osm(<<"Plug & Charge">>)                  -> <<"plug_and_charge">>;
+payment_to_osm(<<"Bargeld">>)                        -> <<"cash">>;
+payment_to_osm(<<"Kostenlos">>)                      -> <<"free">>;
+payment_to_osm(<<"Sonstige">>)                       -> <<"other">>;
+payment_to_osm(Other)                                -> Other.
+
+parking_to_osm(<<"Keine Beschränkung"/utf8>>)        -> <<"yes">>;
+parking_to_osm(<<"keine Beschränkung"/utf8>>)        -> <<"yes">>;
+parking_to_osm(<<"Nur für Kunden/Besucher"/utf8>>)   -> <<"customers">>;
+parking_to_osm(<<"nur für Kunden/Besucher"/utf8>>)   -> <<"customers">>;
+parking_to_osm(Other)                                -> Other.
 
 %% --- deep map operations ---
 

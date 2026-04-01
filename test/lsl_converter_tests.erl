@@ -69,13 +69,13 @@ common_tests(Label, Map, ExpectedRows) ->
       ?assertMatch(#{<<"geo">> := _}, First),
       ?assertMatch(#{<<"charging">> := _}, First)
     end},
-    {iolist_to_binary([Label, " first entry address fields"]), fun() ->
-      ?assertMatch(#{<<"Straße"/utf8>> := _}, Addr),
-      ?assertMatch(#{<<"Hausnummer">> := _}, Addr),
-      ?assertMatch(#{<<"Postleitzahl">> := _}, Addr),
-      ?assertMatch(#{<<"Ort">> := _}, Addr),
-      ?assertMatch(#{<<"Bundesland">> := _}, Addr),
-      ?assertMatch(#{<<"Kreis/kreisfreie Stadt">> := _}, Addr)
+    {iolist_to_binary([Label, " first entry address fields (english keys)"]), fun() ->
+      ?assertMatch(#{<<"street">> := _}, Addr),
+      ?assertMatch(#{<<"house_number">> := _}, Addr),
+      ?assertMatch(#{<<"postcode">> := _}, Addr),
+      ?assertMatch(#{<<"city">> := _}, Addr),
+      ?assertMatch(#{<<"state">> := _}, Addr),
+      ?assertMatch(#{<<"district">> := _}, Addr)
     end},
     {iolist_to_binary([Label, " first entry geo is numeric"]), fun() ->
       #{<<"lat">> := Lat, <<"lon">> := Lon} = Geo,
@@ -107,44 +107,70 @@ common_tests(Label, Map, ExpectedRows) ->
       #{<<"charging">> := #{<<"points">> := Pts}} = Second,
       ?assertEqual(4, length(Pts))
     end},
-    {iolist_to_binary([Label, " Schnellladeeinrichtung has multiple plug types"]), fun() ->
+    {iolist_to_binary([Label, " rapid charger has multiple plug types"]), fun() ->
       Entry = lists:nth(6, Data),
-      ?assertEqual(<<"Schnellladeeinrichtung">>, maps:get(<<"device_type">>, Entry)),
+      ?assertEqual(<<"rapid">>, maps:get(<<"device_type">>, Entry)),
       #{<<"charging">> := #{<<"points">> := Pts}} = Entry,
       ?assertEqual(2, length(Pts)),
       [_P1E, P2E] = Pts,
       #{<<"plugs">> := Plugs2} = P2E,
       ?assertEqual(2, length(Plugs2))
     end},
+    {iolist_to_binary([Label, " status is OSM value"]), fun() ->
+      ?assertEqual(<<"operational">>, maps:get(<<"status">>, First))
+    end},
+    {iolist_to_binary([Label, " device_type is OSM value"]), fun() ->
+      ?assertEqual(<<"normal">>, maps:get(<<"device_type">>, First))
+    end},
+    {iolist_to_binary([Label, " rated_power_kw is number"]), fun() ->
+      ?assert(is_number(maps:get(<<"rated_power_kw">>, Charging)))
+    end},
+    {iolist_to_binary([Label, " commissioning_date is ISO 8601"]), fun() ->
+      Date = maps:get(<<"commissioning_date">>, Charging),
+      %% "11.01.2020" → "2020-01-11"
+      ?assertEqual(<<"2020-01-11">>, Date)
+    end},
     {iolist_to_binary([Label, " access fields"]), fun() ->
       ?assertMatch(#{<<"access">> := _}, First),
       #{<<"access">> := Access} = First,
       ?assertMatch(#{<<"opening_hours">> := _}, Access),
-      ?assertMatch(#{<<"opening_weekdays">> := _}, Access),
-      ?assertMatch(#{<<"opening_daytime">> := _}, Access),
       ?assertMatch(#{<<"payment">> := _}, Access),
-      ?assertMatch(#{<<"parking_info">> := _}, Access)
+      ?assertMatch(#{<<"parking">> := _}, Access),
+      %% raw fields must be gone
+      ?assertEqual(undefined, maps:get(<<"opening_hours_raw">>, Access, undefined)),
+      ?assertEqual(undefined, maps:get(<<"opening_weekdays_raw">>, Access, undefined)),
+      ?assertEqual(undefined, maps:get(<<"opening_daytime_raw">>, Access, undefined))
     end},
-    {iolist_to_binary([Label, " opening_hours_osm for 24/7"]), fun() ->
+    {iolist_to_binary([Label, " opening_hours is 24/7"]), fun() ->
       #{<<"access">> := Access247} = First,
-      ?assertEqual(<<"24/7">>, maps:get(<<"opening_hours_osm">>, Access247))
+      ?assertEqual(<<"24/7">>, maps:get(<<"opening_hours">>, Access247))
     end},
-    {iolist_to_binary([Label, " opening_hours_osm absent when unknown"]), fun() ->
-      %% Entry 2 has "Keine Angabe" → no OSM field
+    {iolist_to_binary([Label, " opening_hours absent when unknown"]), fun() ->
       Second = lists:nth(2, Data),
       Access2 = maps:get(<<"access">>, Second, #{}),
-      ?assertEqual(undefined, maps:get(<<"opening_hours_osm">>, Access2, undefined))
+      ?assertEqual(undefined, maps:get(<<"opening_hours">>, Access2, undefined))
+    end},
+    {iolist_to_binary([Label, " payment is list of OSM tags"]), fun() ->
+      #{<<"access">> := AccessP} = First,
+      #{<<"payment">> := Payment} = AccessP,
+      ?assert(is_list(Payment)),
+      ?assert(lists:member(<<"rfid">>, Payment)),
+      ?assert(lists:member(<<"app">>, Payment))
+    end},
+    {iolist_to_binary([Label, " parking is OSM access tag"]), fun() ->
+      #{<<"access">> := AccessPark} = First,
+      ?assertEqual(<<"yes">>, maps:get(<<"parking">>, AccessPark))
     end},
     {iolist_to_binary([Label, " display name"]), fun() ->
       ?assertMatch(#{<<"display_name">> := _}, First)
     end},
-    {iolist_to_binary([Label, " Adresszusatz"]), fun() ->
+    {iolist_to_binary([Label, " address_extra"]), fun() ->
       Entry7 = lists:nth(7, Data),
       #{<<"addr">> := Addr7} = Entry7,
-      ?assertMatch(#{<<"Adresszusatz">> := <<"Parkplatz Albhotel">>}, Addr7),
+      ?assertMatch(#{<<"address_extra">> := <<"Parkplatz Albhotel">>}, Addr7),
       Entry8 = lists:nth(8, Data),
       #{<<"addr">> := Addr8} = Entry8,
-      ?assertMatch(#{<<"Adresszusatz">> := <<"Parkplatz Albhotel Bahnhoefle">>}, Addr8)
+      ?assertMatch(#{<<"address_extra">> := <<"Parkplatz Albhotel Bahnhoefle">>}, Addr8)
     end},
     {iolist_to_binary([Label, " location name"]), fun() ->
       Entry = lists:nth(7, Data),
