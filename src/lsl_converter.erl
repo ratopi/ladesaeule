@@ -3,8 +3,8 @@
 %%% @copyright (C) 2024-2026, Ralf Thomas Pietsch
 %%% @doc CSV to JSON conversion logic. Parses the BNetzA
 %%% Ladesäulenregister CSV format and writes structured JSON.
-%%% Uses lsl_mapping for the declarative column→JSON-path mapping
-%%% and post-processing.
+%%% Uses lsl_mapping for the structure definition and lsl_row
+%%% for row-level conversion.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lsl_converter).
@@ -14,7 +14,7 @@
 
 -record(starting, {io, infos = []}).
 -record(got_header1, {io}).
--record(read_lines, {io, headers, post_processors, first_line = true}).
+-record(read_lines, {io, row_state, first_line = true}).
 
 %%%===================================================================
 %%% API
@@ -66,59 +66,25 @@ handler_fun([<<>> | _], State = #starting{}) ->
 handler_fun([Info | _], State = #starting{infos = Infos}) ->
   State#starting{infos = [Info | Infos]};
 
-handler_fun(Headers2, #got_header1{io = IO}) ->
-  Headers = build_headers(Headers2),
-  PostProcessors = lsl_mapping:post_processors(),
+handler_fun(Headers, #got_header1{io = IO}) ->
+  RowState = lsl_row:create(Headers),
   file:write(IO, <<$[, 10>>),
-  #read_lines{headers = Headers, post_processors = PostProcessors, io = IO};
+  #read_lines{row_state = RowState, io = IO};
 
-handler_fun(eof, #read_lines{io = _IO}) ->
-  file:write(_IO, <<10, $]>>),
+handler_fun(eof, #read_lines{io = IO}) ->
+  file:write(IO, <<10, $]>>),
   eof;
 
 handler_fun([<<>> | _], State = #read_lines{}) ->
   State;
 
-handler_fun(Line, State = #read_lines{io = IO, headers = Headers, post_processors = PPs, first_line = true}) ->
-  Map = build_map(Headers, PPs, Line),
+handler_fun(Line, State = #read_lines{io = IO, row_state = RowState, first_line = true}) ->
+  Map = lsl_row:line_to_map(RowState, Line),
   file:write(IO, jsx:encode(Map)),
   State#read_lines{first_line = false};
 
-handler_fun(Line, State = #read_lines{io = IO, headers = Headers, post_processors = PPs}) ->
-  Map = build_map(Headers, PPs, Line),
+handler_fun(Line, State = #read_lines{io = IO, row_state = RowState}) ->
+  Map = lsl_row:line_to_map(RowState, Line),
   file:write(IO, <<$,, 10>>),
   file:write(IO, jsx:encode(Map)),
   State.
-
-
-%% --- Map building ---
-
-build_map(Headers, PostProcessors, Line) ->
-  RawMap = build_map_cols(Headers, Line, #{}),
-  lists:foldl(fun(PP, Map) -> PP(Map) end, RawMap, PostProcessors).
-
-build_map_cols([], [], Map) ->
-  Map;
-
-build_map_cols([_ | Headers], [<<>> | Line], Map) ->
-  build_map_cols(Headers, Line, Map);
-
-build_map_cols([Fun | Headers], [V | Line], Map) ->
-  MV = re:replace(V, <<"(", 194, 160, ")|(\n)$">>, <<>>, [{return, binary}]),
-  build_map_cols(Headers, Line, Fun(MV, Map)).
-
-
-%% --- Header mapping via lsl_mapping ---
-
-build_headers(Headers) ->
-  MappingTable = lsl_mapping:mappings(),
-  MappingMap = maps:from_list([{Col, Entry} || Entry = {_, Col, _} <- MappingTable]),
-  lists:map(
-    fun(ColName) ->
-      case maps:get(ColName, MappingMap, undefined) of
-        undefined -> erlang:error({unknown_header, ColName});
-        Entry -> lsl_mapping:build_fun(Entry)
-      end
-    end,
-    Headers
-  ).
