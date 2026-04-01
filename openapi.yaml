@@ -1,0 +1,256 @@
+openapi: 3.0.3
+
+info:
+  title: Ladesäulenregister API
+  description: |
+    Wöchentlich aktualisierte JSON-Datei mit allen Ladestationen aus dem
+    [Ladesäulenregister der Bundesnetzagentur](https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/start.html).
+
+    Die Datei wird als statische gzip-komprimierte JSON-Datei über GitHub Pages
+    bereitgestellt. Attribut-Werte orientieren sich, wo möglich, am
+    [OpenStreetMap-Standard für Ladestationen](https://wiki.openstreetmap.org/wiki/Tag:amenity%3Dcharging_station).
+  version: 0.2.0
+  license:
+    name: MIT
+    url: https://github.com/ratopi/ladesaeule/blob/master/LICENSE
+  contact:
+    name: Ralf Thomas Pietsch
+    url: https://github.com/ratopi/ladesaeule
+
+servers:
+  - url: https://ratopi.github.io/ladesaeule
+    description: GitHub Pages
+
+paths:
+  /ladesaeulen.json.gz:
+    get:
+      summary: Ladesäulenregister als gzip-komprimiertes JSON
+      description: |
+        Liefert das gesamte Ladesäulenregister als gzip-komprimierte JSON-Datei
+        (ca. 8 MB komprimiert, ca. 67 MB unkomprimiert).
+      operationId: getLadesaeulen
+      responses:
+        "200":
+          description: Erfolgreich
+          headers:
+            Content-Encoding:
+              schema:
+                type: string
+                example: gzip
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ladesaeulenregister"
+
+components:
+  schemas:
+    Ladesaeulenregister:
+      type: object
+      required: [infos, data, meta]
+      properties:
+        infos:
+          type: array
+          description: Info-Zeilen aus dem CSV-Header (Titel, Hinweise, Aktualisierungsdatum)
+          items:
+            type: string
+          example:
+            - "Ladesäulenregister Bundesnetzagentur"
+            - "Hinweis: ..."
+        data:
+          type: array
+          description: Liste aller Ladestationen
+          items:
+            $ref: "#/components/schemas/ChargingStation"
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    Meta:
+      type: object
+      required: [source, download_time]
+      properties:
+        source:
+          type: string
+          format: uri
+          description: URL der CSV-Quelldatei
+          example: "https://data.bundesnetzagentur.de/.../Ladesaeulenregister_BNetzA_2026-03-25.csv"
+        download_time:
+          type: string
+          format: date-time
+          description: Zeitstempel des Downloads
+          example: "2026-04-01T14:59:36"
+        source_last_modified:
+          type: string
+          description: Last-Modified-Header der CSV-Datei
+          example: "Wed, 26 Mar 2026 14:36:31 GMT"
+
+    ChargingStation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Ladeeinrichtungs-ID der BNetzA
+          example: "1010338"
+        operator:
+          type: string
+          description: Betreiber der Ladeeinrichtung
+          example: "Albwerk Elektro- und Kommunikationstechnik GmbH"
+        display_name:
+          type: string
+          description: Anzeigename (Karte)
+          example: "Albwerk Elektro- und Kommunikationstechnik GmbH"
+        status:
+          type: string
+          description: |
+            Betriebsstatus (OSM-Werte).
+          enum: [operational, planned, broken, disused, construction]
+          example: operational
+        device_type:
+          type: string
+          description: Art der Ladeeinrichtung
+          enum: [normal, rapid]
+          example: normal
+        location_name:
+          type: string
+          description: Standortbezeichnung
+        addr:
+          $ref: "#/components/schemas/Address"
+        geo:
+          $ref: "#/components/schemas/Geo"
+        charging:
+          $ref: "#/components/schemas/Charging"
+        access:
+          $ref: "#/components/schemas/Access"
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+          example: "Am Berg"
+        house_number:
+          type: string
+          example: "1"
+        address_extra:
+          type: string
+          description: Adresszusatz
+        postcode:
+          type: string
+          example: "72535"
+        city:
+          type: string
+          example: "Heroldstatt"
+        state:
+          type: string
+          description: Bundesland
+          example: "Baden-Württemberg"
+        district:
+          type: string
+          description: Kreis / kreisfreie Stadt
+          example: "Landkreis Alb-Donau-Kreis"
+
+    Geo:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          description: Breitengrad (WGS 84)
+          example: 48.442398
+        lon:
+          type: number
+          format: double
+          description: Längengrad (WGS 84)
+          example: 9.659075
+
+    Charging:
+      type: object
+      properties:
+        rated_power_kw:
+          type: number
+          description: Nennleistung der Ladeeinrichtung in kW
+          example: 22
+        commissioning_date:
+          type: string
+          format: date
+          description: Inbetriebnahmedatum (ISO 8601)
+          example: "2020-01-11"
+        device_type:
+          type: string
+          description: Art der Ladeeinrichtung (Originalwert aus der CSV)
+        points:
+          type: array
+          description: Ladepunkte (1–6)
+          items:
+            $ref: "#/components/schemas/ChargingPoint"
+
+    ChargingPoint:
+      type: object
+      properties:
+        plugs:
+          type: array
+          description: Steckertypen
+          items:
+            type: string
+          example: ["AC Typ 2 Steckdose"]
+        power:
+          type: array
+          description: Nennleistung je Stecker
+          items:
+            type: string
+          example: ["22"]
+        kW:
+          type: number
+          description: Leistung in kW
+          example: 22.0
+        evse_id:
+          type: array
+          description: EVSE-ID(s)
+          items:
+            type: string
+          example: ["DEAEWE002501"]
+        pkey:
+          type: string
+          description: Public Key
+
+    Access:
+      type: object
+      description: |
+        Zugangs- und Öffnungsinformationen.
+        Werte orientieren sich am OpenStreetMap-Standard:
+        - [parking → access](https://wiki.openstreetmap.org/wiki/Key:access)
+        - [payment → payment:*](https://wiki.openstreetmap.org/wiki/Key:payment)
+        - [opening_hours](https://wiki.openstreetmap.org/wiki/Key:opening_hours)
+      properties:
+        parking:
+          type: string
+          description: |
+            Zugangsbeschränkung zum Parkraum
+            ([OSM access](https://wiki.openstreetmap.org/wiki/Key:access))
+          enum: ["yes", customers]
+          example: "yes"
+        payment:
+          type: array
+          description: |
+            Akzeptierte Zahlungsmittel
+            ([OSM payment:*](https://wiki.openstreetmap.org/wiki/Key:payment))
+          items:
+            type: string
+            enum:
+              - app
+              - rfid
+              - contactless:credit_cards
+              - credit_cards
+              - contactless:debit_cards
+              - debit_cards
+              - plug_and_charge
+              - cash
+              - free
+              - other
+          example: ["rfid", "app"]
+        opening_hours:
+          type: string
+          description: |
+            Öffnungszeiten im
+            [OSM opening_hours](https://wiki.openstreetmap.org/wiki/Key:opening_hours)-Format
+          example: "24/7"
+

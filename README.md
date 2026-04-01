@@ -17,6 +17,8 @@ Die aktuelle `ladesaeulen.json.gz` wird wöchentlich per [GitHub Action](#github
 > **Hinweis:** Die Datei ist gzip-komprimiert (ca. 8 MB statt ca. 67 MB unkomprimiert).
 > Die meisten HTTP-Clients und Programmiersprachen können gzip transparent dekomprimieren.
 
+Die Struktur der JSON-Datei ist in der [openapi.yaml](openapi.yaml) formal beschrieben.
+
 ## Bauen
 
 Voraussetzung: Erlang/OTP und [rebar3](https://rebar3.org/) müssen installiert sein.
