@@ -117,9 +117,8 @@ parse(<<$", $", Rest/binary>>, State = #cell_parser_state{cell_type = ?MASKED, c
 
 parse(<<$", Rest/binary>>, State = #cell_parser_state{cell_type = ?MASKED}) ->
 	parse(Rest, State#cell_parser_state{cell_type = ?UNMASKED});
-
-parse(<<$", _Rest/binary>>, _State = #cell_parser_state{cell_type = ?UNMASKED}) ->
-	{error, {<<$">>, illegal_character}};
+parse(<<$", Rest/binary>>, State = #cell_parser_state{cell_type = ?UNMASKED, current_cell = Cell}) ->
+	parse(Rest, State#cell_parser_state{current_cell = <<Cell/binary, $">>});
 
 parse(<<Char, Rest/binary>>, State = #cell_parser_state{cell_type = ?MASKED, current_cell = Cell, encoding = Enc}) ->
 	Utf8Char = to_utf8_char(Char, Enc),

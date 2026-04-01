@@ -32,8 +32,12 @@ lädt die CSV-Datei herunter und schreibt das Ergebnis nach `public/ladesaeulen.
 
     rebar3 eunit
 
-Die Tests nutzen eine gekürzte CSV-Datei unter `test/data/ladesaeulen_sample.csv` und prüfen
-die Konvertierung lokal, ohne HTTP-Zugriff.
+Die Tests umfassen:
+
+- **`lsl_converter_tests`** – Konvertierungs-Tests mit gekürzten CSV-Dateien
+  unter `test/data/` (UTF-8 und ISO-8859-1), ohne HTTP-Zugriff.
+- **`cell_parser_tests`** – Unit-Tests für den CSV-Parser, u.a. für maskierte
+  Zellen, Anführungszeichen in nicht-quotierten Zellen und Chunked Input.
 
 ## Wie die Konvertierung abläuft
 
@@ -60,7 +64,10 @@ heruntergeladen und konvertiert.
 Die CSV wird per HTTP-Streaming (`httpc`, async) heruntergeladen.
 Die empfangenen Chunks werden direkt dem `cell_parser` übergeben – einem
 Continuation-basierten CSV-Parser, der Semikolon-getrennte, optional in Anführungszeichen
-maskierte Zellen verarbeitet und einen UTF-8 BOM am Dateianfang entfernt.
+maskierte Zellen verarbeitet. Die Encoding-Erkennung geschieht automatisch: ein UTF-8 BOM
+wird erkannt und entfernt, ansonsten wird heuristisch zwischen UTF-8 und ISO-8859-1
+unterschieden (ISO-8859-1 wird on-the-fly in UTF-8 konvertiert). Anführungszeichen
+innerhalb nicht-quotierter Zellen werden tolerant als normales Zeichen behandelt.
 
 ### 4. Header und Info-Zeilen verarbeiten
 
@@ -176,14 +183,14 @@ nur die `.gz`-Version wird veröffentlicht, um die `gh-pages`-Historie klein zu 
 | `lsl_loader` | HTTP-Kommunikation – CSV-URL von der BNetzA-Seite scrapen, Update-Check per HEAD-Request, CSV-Download via Streaming |
 | `lsl_converter` | CSV→JSON-Konvertierung – Header-Mapping, Datenzeilen in verschachtelte Maps überführen, Ladepunkte als Array aufbauen |
 | `lsl_json` | JSON-Dateiverwaltung – Ausgabepfad, Datei öffnen/schließen, Meta-Daten lesen und schreiben, gzip-Komprimierung |
-| `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, BOM-Entfernung |
+| `cell_parser` | Continuation-basierter CSV-Parser – Semikolon-getrennt, maskierte Zellen, automatische Encoding-Erkennung (UTF-8/ISO-8859-1), tolerante Behandlung von Anführungszeichen in nicht-quotierten Zellen |
 
 
 ## GitHub Action
 
 Die Workflow-Datei `.github/workflows/update.yml` automatisiert die Aktualisierung.
 
-**Zeitplan:** Jeden Montag um 6:00 UTC (per Cron).
+**Zeitplan:** Jeden Montag um 6:00 UTC (per Cron) sowie bei jedem Push auf `master`.
 
 **Manuell auslösen:** Der Workflow kann jederzeit manuell gestartet werden:
 

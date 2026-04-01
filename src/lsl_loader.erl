@@ -134,7 +134,12 @@ stream_content(RequestId, CellParserFun, HttpHeaders) ->
       stream_content(RequestId, CellParserFun, Headers);
 
     {http, {RequestId, stream, BinBodyPart}} ->
-      stream_content(RequestId, CellParserFun(BinBodyPart), HttpHeaders);
+      case CellParserFun(BinBodyPart) of
+        NextFun when is_function(NextFun) ->
+          stream_content(RequestId, NextFun, HttpHeaders);
+        Error ->
+          {error, {parser_error, Error}}
+      end;
 
     {http, {RequestId, stream_end, _TrailerHeaders}} ->
       {ok, CellParserFun(eof), HttpHeaders};
