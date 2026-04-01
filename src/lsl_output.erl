@@ -15,7 +15,7 @@
 -module(lsl_output).
 
 %% API
--export([output_path/0, ensure_output_dir/0, open/0, open/1, close/1]).
+-export([open/0, open/1, close/1]).
 -export([write_begin/1, write_data_separator/1, write_end/1]).
 -export([write_json/2, write_meta/3]).
 -export([read_existing_meta/0]).
@@ -29,17 +29,6 @@
 %%% API
 %%%===================================================================
 
-%% @doc Returns the path of the output JSON file.
--spec output_path() -> string().
-output_path() -> get_env(output_file).
-
-%% @doc Ensures the output directory exists.
--spec ensure_output_dir() -> ok | {error, term()}.
-ensure_output_dir() ->
-  Dir = get_env(output_dir),
-  ok = filelib:ensure_dir(Dir ++ "/"),
-  file:make_dir(Dir),
-  ok.
 
 %% @doc Opens the default output JSON file for writing.
 -spec open() -> {ok, lsl_output()} | {error, term()}.
@@ -130,6 +119,13 @@ compress() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% Ensures the output directory exists.
+ensure_output_dir() ->
+  Dir = get_env(output_dir),
+  ok = filelib:ensure_dir(Dir ++ "/"),
+  file:make_dir(Dir),
+  ok.
 
 %% Opens a file and wraps the handle in the lsl_output record.
 open_file(Path) ->

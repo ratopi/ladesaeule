@@ -35,7 +35,7 @@
 -module(lsl_mapping).
 
 %% API
--export([mapping/0, columns/0]).
+-export([mapping/0]).
 
 %%%===================================================================
 %%% API
@@ -84,12 +84,6 @@ mapping() ->
     ]}
   ].
 
-
-%% @doc Returns a flat list of all CSV column names referenced by the mapping.
-%% Used by lsl_row to build the column-index lookup.
--spec columns() -> [binary()].
-columns() ->
-  lists:usort(collect_columns(mapping())).
 
 
 %%%===================================================================
@@ -150,17 +144,3 @@ parking_to_osm(<<"Nur für Kunden/Besucher"/utf8>>)   -> <<"customers">>;
 parking_to_osm(<<"nur für Kunden/Besucher"/utf8>>)   -> <<"customers">>;
 parking_to_osm(Other)                                -> Other.
 
-%% --- column collection from mapping tree ---
-
-collect_columns([]) -> [];
-collect_columns([Node | Rest]) ->
-  collect_columns_node(Node) ++ collect_columns(Rest).
-
-collect_columns_node({_Key, Children}) when is_list(Children) ->
-  collect_columns(Children);
-collect_columns_node({_Key, {collect, From, To}, TemplateFun}) ->
-  lists:append([collect_columns(TemplateFun(N)) || N <- lists:seq(From, To)]);
-collect_columns_node({_Key, {'fun', _Fun}, CsvCols}) when is_list(CsvCols) ->
-  CsvCols;
-collect_columns_node({_Key, _Type, CsvCol}) when is_binary(CsvCol) ->
-  [CsvCol].
