@@ -4,6 +4,9 @@
 %%% @doc HTTP communication: scrapes the CSV URL from the
 %%% Bundesnetzagentur website, checks for updates via HEAD request,
 %%% and downloads the CSV via streaming.
+%%%
+%%% For output (JSON file writing) this module delegates exclusively
+%%% to lsl_output.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(lsl_loader).
@@ -19,7 +22,7 @@
 %% the URL of the current Ladesäulenregister CSV file.
 -spec get_url() -> {ok, string()} | {error, term()}.
 get_url() ->
-  UrlUrl = "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/start.html",
+  {ok, UrlUrl} = application:get_env(lsl, source_page_url),
   case httpc:request(UrlUrl) of
     {ok, {{_, 200, _}, _, Body}} ->
       case re:run(Body, "<a[^>]*href=\"([^>\"]*[.]csv)\"[^>]*>") of
@@ -41,7 +44,7 @@ get_url() ->
 %% Compares the URL and the `Last-Modified' HTTP header.
 -spec needs_update(string()) -> boolean().
 needs_update(Url) ->
-  case lsl_json:read_existing_meta() of
+  case lsl_output:read_existing_meta() of
     {ok, Meta} ->
       ExistingSource = maps:get(<<"source">>, Meta, undefined),
       ExistingLastMod = maps:get(<<"source_last_modified">>, Meta, undefined),
@@ -77,25 +80,25 @@ needs_update(Url) ->
 %% and writes the result to the output JSON file.
 -spec load_data(string()) -> ok | {error, term()}.
 load_data(Url) ->
-  case lsl_json:open() of
-    {ok, IO} ->
-      lsl_json:write_begin(IO),
+  case lsl_output:open() of
+    {ok, Out} ->
+      lsl_output:write_begin(Out),
       io:fwrite("loading ~p~n", [Url]),
       case httpc:request(get, {Url, []}, [], [{sync, false}, {stream, self}, {body_format, binary}]) of
         Err = {error, _} ->
-          lsl_json:close(IO),
+          lsl_output:close(Out),
           Err;
         {ok, RequestId} ->
-          case stream_content(RequestId, lsl_converter:new_parser(IO)) of
+          case stream_content(RequestId, lsl_converter:new_parser(Out)) of
             Err = {error, _} ->
-              lsl_json:close(IO),
+              lsl_output:close(Out),
               Err;
             {ok, _Result, HttpHeaders} ->
               LastModified = proplists:get_value("last-modified", HttpHeaders, undefined),
-              lsl_json:write_meta(IO, Url, LastModified),
-              lsl_json:write_end(IO),
-              lsl_json:close(IO),
-              lsl_json:compress(),
+              lsl_output:write_meta(Out, Url, LastModified),
+              lsl_output:write_end(Out),
+              lsl_output:close(Out),
+              lsl_output:compress(),
               ok
           end
       end;
@@ -129,6 +132,7 @@ stream_content(RequestId, CellParserFun) ->
   stream_content(RequestId, CellParserFun, []).
 
 stream_content(RequestId, CellParserFun, HttpHeaders) ->
+  {ok, Timeout} = application:get_env(lsl, stream_timeout),
   receive
     {http, {RequestId, stream_start, Headers}} ->
       stream_content(RequestId, CellParserFun, Headers);
@@ -147,7 +151,6 @@ stream_content(RequestId, CellParserFun, HttpHeaders) ->
     {http, {RequestId, {{_, 404, _}, _Headers, _Content}}} ->
       {error, not_found}
 
-  after 10000 ->
+  after Timeout ->
     {error, timeout}
   end.
-

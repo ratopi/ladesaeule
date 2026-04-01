@@ -23,6 +23,7 @@ main(_Args) ->
   application:ensure_started(stdlib),
   application:ensure_started(inets),
   application:ensure_started(jsx),
+  application:load(lsl),
   ssl:start(),
   case lsl_loader:get_url() of
     {ok, Url} ->

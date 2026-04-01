@@ -11,7 +11,13 @@
 		jsx
 	]},
 
-	{env, []},
+	{env, [
+		{source_page_url, "https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/start.html"},
+		{output_dir, "./public"},
+		{output_file, "./public/ladesaeulen.json"},
+		{output_file_gz, "./public/ladesaeulen.json.gz"},
+		{stream_timeout, 10000}
+	]},
 	{modules, []},
 
 	{licenses, ["MIT"]},
